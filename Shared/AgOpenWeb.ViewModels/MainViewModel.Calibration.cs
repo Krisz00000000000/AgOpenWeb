@@ -30,6 +30,16 @@ public partial class MainViewModel
     private readonly AntennaCalibrationCollector _antennaCalibration = new();
     private int _calibrationAlgorithm;
 
+    /// <summary>Driving distance after which the wizard builds the AB line from the driven pass.</summary>
+    private const double AutoLineDistanceMetres = 15.0;
+
+    // Where wizard step 2 (no guidance line yet) started. Local plane for the distance,
+    // lat/lon for the line itself (it is built through the driven points, like a typed AB).
+    private double? _wizardLineStartE;
+    private double? _wizardLineStartN;
+    private double? _wizardLineStartLat;
+    private double? _wizardLineStartLon;
+
     /// <summary>True while an automatic calibration is recording.</summary>
     public bool IsCalibrationRecording => _antennaCalibration.IsCollecting;
 
@@ -44,6 +54,7 @@ public partial class MainViewModel
         _calibrationAlgorithm = algorithm;
         _antennaCalibration.Reset();
         _antennaCalibration.Start();
+        _wizardLineStartE = null; // step 2 will pick its start point on the next cycle
 
         // Publish straight away so the panel shows what is still missing rather than zeros.
         PublishCalibration(_antennaCalibration.Fit());
@@ -61,6 +72,7 @@ public partial class MainViewModel
     {
         _antennaCalibration.Reset();
         _calibrationAlgorithm = 0;
+        _wizardLineStartE = null;
         PublishCalibration(null);
     }
 
@@ -72,17 +84,23 @@ public partial class MainViewModel
     {
         if (!_antennaCalibration.IsCollecting) return;
 
-        var track = State.Field.ActiveTrack;
-        if (track is null || track.Points.Count < 2)
+        var line = State.Guidance.DisplayLine is { Count: >= 2 } followed
+            ? followed
+            : State.Field.ActiveTrack?.Points;
+        if (line is null || line.Count < 2)
         {
-            State.Calibration.LastRejectReason = "no active track";
+            State.Calibration.LastRejectReason = "no guidance line yet";
             return;
         }
 
         // Line-relative deviation of the RAW antenna (positive = right of A→B), so the
         // two directions differ only by the direction sign — see AntennaCalibrationSample.
-        double deviation = CalibrationGeometry.SignedDistanceToTrack(
-            track, result.AntennaEasting, result.AntennaNorthing);
+        // Measured against the line the vehicle is STEERED to (the followed, offset line for
+        // the current pass). The base track can be a whole pass away — a driven A+ line sits
+        // at the implement's edge, which reads as ~half a tool width (1.79 m) of "antenna
+        // error" while the vehicle is perfectly on its line.
+        double deviation = CalibrationGeometry.SignedDistanceToLine(
+            line, result.AntennaEasting, result.AntennaNorthing);
 
         bool kept = _antennaCalibration.TryAdd(
             result.IsHeadingSameWay ? 1.0 : -1.0,
@@ -98,6 +116,57 @@ public partial class MainViewModel
             PublishCalibration(_antennaCalibration.Fit());
         else
             PublishCalibrationCounters();
+    }
+
+    /// <summary>
+    /// Wizard step 2: while there is no guidance line, the operator just drives forward and
+    /// the line is built from the segment they drove — A where this step started, B
+    /// <see cref="AutoLineDistanceMetres"/> later. Nothing to open, nothing to place by hand;
+    /// <c>calibration.wizard.track</c> stays available as a manual override.
+    /// </summary>
+    private void UpdateCalibrationLine(GpsCycleResult result)
+    {
+        if (!_antennaCalibration.IsCollecting)
+        {
+            _wizardLineStartE = null;
+            return;
+        }
+
+        // A line already exists (or the operator made one): nothing to build.
+        if (State.Field.ActiveTrack is not null)
+        {
+            _wizardLineStartE = null;
+            State.Calibration.LineDistanceMeters = 0;
+            return;
+        }
+
+        if (_wizardLineStartE is null || _wizardLineStartLat is null || _wizardLineStartLon is null)
+        {
+            _wizardLineStartE = result.Easting;
+            _wizardLineStartN = result.Northing;
+            _wizardLineStartLat = result.Latitude;
+            _wizardLineStartLon = result.Longitude;
+            State.Calibration.LineDistanceMeters = 0;
+            return;
+        }
+
+        double de = result.Easting - _wizardLineStartE.Value;
+        double dn = result.Northing - _wizardLineStartN!.Value;
+        double driven = Math.Sqrt((de * de) + (dn * dn));
+        State.Calibration.LineDistanceMeters = driven;
+
+        if (driven < AutoLineDistanceMetres) return;
+
+        double latA = _wizardLineStartLat.Value;
+        double lonA = _wizardLineStartLon.Value;
+        _wizardLineStartE = null;
+        _wizardLineStartN = null;
+        _wizardLineStartLat = null;
+        _wizardLineStartLon = null;
+        State.Calibration.LineDistanceMeters = 0;
+
+        // The ordinary typed AB: heading runs from A to B, so the line follows what was driven.
+        CreateLatLonABLine(latA, lonA, result.Latitude, result.Longitude);
     }
 
     private void PublishCalibration(AntennaCalibrationReport? report)

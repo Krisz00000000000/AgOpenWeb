@@ -225,6 +225,29 @@ from the **raw** antenna position the pipeline now carries in `GpsCycleResult`
 `IsHeadingSameWay`. Deviation is line-relative (`CalibrationGeometry`), the direction sign makes
 both passes comparable, and the fit runs every 25 new samples — never per cycle.
 
+## What the recorded deviation can and cannot tell you (found while testing)
+
+Two things came out of the first bench session, both now handled:
+
+- **The reference must be the line the vehicle is steered to, not the base track.** A driven
+  `A+` line sits at the implement's edge, so the pass the vehicle follows is half a tool width
+  away from it; measuring the base track reported 1.79 m of "antenna error" while the vehicle
+  was perfectly on its line. Sampling now uses `State.Guidance.DisplayLine` (the followed,
+  offset line for the current pass), falling back to the active track. A test pins this.
+- **Step 2 builds its own line from the driven pass.** Drive forward ~15 m and the wizard
+  creates the AB through what was driven (`CreateLatLonABLine`); the manual button stays as an
+  override. No field, no track, no tapping on the map.
+
+**The caveat this exposed (unresolved, needs a real measurement):** the antenna→pivot transform
+uses `AntennaOffset` + `AntennaHeight·sin(roll)`, and the guidance holds that *corrected* point
+on the line. So while the corrections are active, the raw antenna necessarily sits at
+`s·(a_set + h_set·sinφ) + c` from the line — the recorded deviation reproduces **the settings
+already in use**, not the physical mounting. The fit therefore behaves as a *consistency check*
+until the loop is opened (corrections zeroed and the vehicle driven in pre-existing wheel ruts,
+by hand) or until the offset is measured with a tape. Applying the fit blindly can therefore
+make the setup worse, which is why Apply stays a deliberate operator action and why the field
+procedure in the plan stays a gate.
+
 ## Deliberately not done yet
 
 - Algorithms 2–6: menu entries exist and are disabled; no code behind them yet.

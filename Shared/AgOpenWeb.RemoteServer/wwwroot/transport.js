@@ -223,6 +223,7 @@ window.RemoteTransport = {
           const calMessage = str(), calReject = str();
           // Wizard step + its stable key ("field", "track", "forward", "reverse", "roll", "result").
           const calStep = i32(), calStepKey = str();
+          const calLineDistance = f32();
           handlers.onStatusBar && handlers.onStatusBar({
             fixQuality, fixText, age, sats, isMetric,
             gpsOk, imuOk, autoSteerOk, machineOk, imuIp, autoSteerIp, machineIp,
@@ -237,7 +238,7 @@ window.RemoteTransport = {
             gpsLost, isobus, fieldData, sendCorrectedPosition, scanReplySubnet, ntripSession,
             calAlgorithm, calRecording, calForward, calReverse, calRollRange, calDeterminate,
             calAccepted, calOffset, calHeight, calOffsetSd, calHeightSd, calMessage, calReject,
-            calStep, calStepKey,
+            calStep, calStepKey, calLineDistance,
           });
           break;
         }

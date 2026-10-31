@@ -56,6 +56,8 @@ public partial class MainViewModel
 
         // Automatic calibration sampling: a no-op unless a recording is running.
         ObserveCalibration(result);
+        // Wizard step 2: builds the AB line from the driven pass once there is enough of it.
+        UpdateCalibrationLine(result);
 
         // Field data card: trip distance (#321).
         if (result.GpsValid) AccumulateTripDistance(result.Easting, result.Northing);

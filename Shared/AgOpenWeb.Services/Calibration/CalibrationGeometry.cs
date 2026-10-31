@@ -28,8 +28,19 @@ public static class CalibrationGeometry
     public static double SignedDistanceToTrack(Models.Track.Track track, double easting, double northing)
     {
         ArgumentNullException.ThrowIfNull(track);
+        return SignedDistanceToLine(track.Points, easting, northing);
+    }
 
-        var points = track.Points;
+    /// <summary>
+    /// Signed perpendicular distance from a point to a guidance line given as its points
+    /// (the pipeline's followed line — <c>State.Guidance.DisplayLine</c> — is a bare point
+    /// list, and that is the line the vehicle is actually being steered to).
+    /// </summary>
+    public static double SignedDistanceToLine(
+        IReadOnlyList<Vec3> points, double easting, double northing)
+    {
+        ArgumentNullException.ThrowIfNull(points);
+
         if (points.Count == 2)
             return SignedDistanceToSegment(points[0], points[1], easting, northing, out _);
 
@@ -37,13 +48,11 @@ public static class CalibrationGeometry
         double signed = 0;
         for (int i = 0; i < points.Count - 1; i++)
         {
-            double candidate = SignedDistanceToSegment(points[i], points[i + 1], easting, northing, out double length);
-            if (length < 0.01) continue;
-
-            // The segment's unsigned distance decides which one is the closest; the signed
-            // value from that same segment is what we return.
             var a = points[i];
             var b = points[i + 1];
+            double candidate = SignedDistanceToSegment(a, b, easting, northing, out double length);
+            if (length < 0.01) continue;
+
             double dx = b.Easting - a.Easting;
             double dn = b.Northing - a.Northing;
             double t = Math.Clamp(((easting - a.Easting) * dx + (northing - a.Northing) * dn) / (length * length), 0, 1);

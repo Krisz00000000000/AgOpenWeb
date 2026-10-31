@@ -79,4 +79,36 @@ public class CalibrationGeometryTests
         Assert.That(() => CalibrationGeometry.SignedDistanceToTrack(null!, 0, 0),
             Throws.TypeOf<ArgumentNullException>());
     }
+
+    [Test]
+    public void PointsOverload_MatchesTheTrackOverload()
+    {
+        var track = NorthLine();
+        var points = track.Points;
+
+        for (double e = -1.5; e <= 1.5; e += 0.5)
+        {
+            Assert.That(CalibrationGeometry.SignedDistanceToLine(points, e, 5.0),
+                Is.EqualTo(CalibrationGeometry.SignedDistanceToTrack(track, e, 5.0)).Within(1e-12));
+        }
+    }
+
+    [Test]
+    public void FollowingTheOffsetLine_ReadsZero_NotTheBaseTrackDistance()
+    {
+        // The bug this pins down: a driven A+ line sits at the implement's edge, and the
+        // vehicle follows the offset line for its pass. Measuring against the base track
+        // reported ~half a tool width (1.79 m here) as if it were an antenna error.
+        var baseTrack = NorthLine();
+        var followed = new[]
+        {
+            new Vec3(-1.79, 0, 0),
+            new Vec3(-1.79, 10, 0),
+        };
+
+        Assert.That(CalibrationGeometry.SignedDistanceToTrack(baseTrack, -1.79, 5.0),
+            Is.EqualTo(-1.79).Within(1e-9), "the base track is a pass away");
+        Assert.That(CalibrationGeometry.SignedDistanceToLine(followed, -1.79, 5.0),
+            Is.EqualTo(0.0).Within(1e-9), "but the vehicle is on the line it follows");
+    }
 }

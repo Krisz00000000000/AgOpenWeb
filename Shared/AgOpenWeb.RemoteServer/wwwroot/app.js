@@ -2529,7 +2529,7 @@ const CAL_STEP_TITLE = {
 };
 const CAL_STEP_HINT = {
   field: tr('Create a temporary field for the calibration. Start does it for you and Finish deletes it again — your own fields are never touched.'),
-  track: tr('Point the vehicle along the pass you want to drive, then press Create AB line here. That line is what the calibration measures against.'),
+  track: tr('Drive forward about 15 m along the way you want to work — the line is built from that pass ({d} m so far).'),
   forward: tr('Drive along the line with autosteer on. {n} of 100 samples in this direction.'),
   reverse: tr('Turn around and drive back on the same wheel track, autosteer on. {n} of 100 samples.'),
   roll: tr('Drive part of the run on a slope and part on the flat — the antenna height needs the vehicle to tilt (3° of roll).'),
@@ -2567,7 +2567,10 @@ function populateCal1() {
   asSetText('cal1-step', String(s.calStep || 1));
   asSetText('cal1-stepname', CAL_STEP_TITLE[key]);
   const count = key === 'reverse' ? (s.calReverse || 0) : (s.calForward || 0);
-  asSetText('cal1-instruction', tr(CAL_STEP_HINT[key], { n: count }));
+  asSetText('cal1-instruction', tr(CAL_STEP_HINT[key], {
+    n: count,
+    d: (s.calLineDistance || 0).toFixed(0),
+  }));
   asSetText('cal1-forward', String(s.calForward || 0));
   asSetText('cal1-reverse', String(s.calReverse || 0));
   asSetText('cal1-roll', (s.calRollRange || 0).toFixed(1) + '°');

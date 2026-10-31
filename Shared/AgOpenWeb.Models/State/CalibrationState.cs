@@ -31,6 +31,10 @@ public class CalibrationState
     /// "result") — the client owns the wording and its translation.</summary>
     public string StepKey { get; set; } = "field";
 
+    /// <summary>Metres driven since wizard step 2 started — the line is built from the first
+    /// <c>AutoLineDistanceMetres</c> of it, so the operator only has to drive straight.</summary>
+    public double LineDistanceMeters { get; set; }
+
     /// <summary>Usable samples recorded driving the track's recorded A→B order.</summary>
     public int ForwardSamples { get; set; }
 

@@ -868,6 +868,7 @@ public static class WireCodec
         // Wizard step + its key (append-only).
         w.Write(s.CalStep);
         WriteStr(w, s.CalStepKey);
+        w.Write((float)s.CalLineDistanceMeters);
         return ms.ToArray();
     }
 
