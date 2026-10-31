@@ -1,0 +1,577 @@
+Text extraction of the source plan document (PDF, 2026-10-31):
+"AgOpenWeb – automatikus kalibrációs algoritmusok és AI-ügynöki megvalósítási terv".
+This file is only the source reference for algorithms 2-6; algorithm 1 is written up in
+CALIBRATION_ALGORITHM_1_ANTENNA.md. The extractor's page markers are kept.
+
+
+=== PAGE 1 ===
+
+AgOpenWeb – automatikus kalibrációs
+algoritmusok és AI-ügynöki megvalósítási
+terv
+Oct 31, 2026  ·  @krisz
+Cél és kiindulópont
+Ez a dokumentum hat kalibrációs és szabályozó algoritmust ír le úgy, hogy egy AI-
+kódolóügynök (például Claude Code) az AgOpenWeb repóban meg tudja valósítani őket.
+Az AgOpenWeb nem a régi AgOpenGPS, hanem C#/.NET 10-es újraírás, böngészős
+felülettel, ezért a régi WinForms-os kódra és fájlformátumra nem szabad építeni.
+Ellenőrzött tények (a repó README-je és CLAUDE.md fájlja, 2026-10-31-i állapot,
+develop  ág):
+A felület egy weboldal, amelyet a háttér-host szolgál ki (LAN-on a :5174  porton); a
+host asztali ablakban, headless szolgáltatásként vagy Androidon is fut.
+A kód 92%-a megosztott ( Shared/ ). Itt él a AgOpenWeb.Services  (GPS, NTRIP, UDP,
+vezetés), a AgOpenWeb.Models  (modellek, geometria, konfiguráció) és a
+AgOpenWeb.ViewModels  ( MainViewModel , a vezérlő agy).
+A vezetés a Shared/AgOpenWeb.Services/Track/TrackGuidanceService.cs  fájlban
+van (Pure Pursuit és Stanley, interfész: ITrackGuidanceService ). Az új vezetési kód a
+Track  modellt használja, az ABLine.cs  elavult.
+A GPS→kormányzás csővezeték neve IAutoSteerService ; a modulokkal az
+IUdpCommunicationService  beszél, a csomagformátum a PGN.md -ben van.
+A beállítások a ConfigurationStore  reaktív singletonban élnek (például
+ConfigStore.Vehicle.AntennaHeight ), és az IConfigurationService  szinkronizálja
+őket az AppSettings  JSON-ba. A járműprofilt az IVehicleProfileService  kezeli.
+Tesztek: NUnit, a Tests/  alatt ( Models , Services , ViewModels , RemoteServer ,
+IntegrationTests ), plusz a Simulators/AgOpenWeb.VirtualModules  virtuális
+GPS/kormány/gép modulokkal.
+Nem ellenőrzött, az ügynök első feladata ezeket kiolvasni a forrásból:
+Hol és hogyan számolódik az IMU/roll, és hogyan kerül be a pozícióba ( CLAUDE.md
+kifejezetten nem tárgyalja).
+AgOpenWeb – automatikus kalibrációs algoritmusok és AI-ügynöki megvalósítási terv
+Page 1 of 15
+
+=== PAGE 2 ===
+
+Mit csinál pontosan az IAutoSteerService , milyen ciklusidővel, és hol van a
+kormányszög-nullpont és a PID/Stanley paraméter.
+A PGN-csomagok bájtszintű formátuma ( PGN.md ), és hogy a kormánymodul
+visszaküldi-e a tényleges kormányszöget és a parancsolt értéket.
+A licenc: az oldalsáv Apache-2.0-t mutat, a README GPL v3.0-ra hivatkozik. A
+CLAUDE.md  az új fájlokhoz // SPDX-License-Identifier: Apache-2.0  fejlécet kér; a
+LICENSE.md -t el kell olvasni, mielőtt kód kerül be.
+A Plans/  és Docs/  mappa tartalmát nem tudtam elérni (a GitHub robots-szabálya tiltja a
+lekérést), ezért az ARCHITECTURE.md  és a GPS_RECEIVERS.md  tartalmát nem ismerem.
+Közös alapok az ügynöknek
+Minden algoritmus ugyanazt a három réteget követi: egy függőségmentes számoló
+osztály, egy vékony szolgáltatás, amely az adatot beköti, és egy javaslat-felület a
+kezelőnek. A szolgáltatás soha nem írja át maga a beállításokat.
+Szerkezet (javaslat, az ügynök a valós mappákhoz igazítja)
+A számoló osztályok egy új Shared/AgOpenWeb.Services/Calibration/  mappába
+kerülnek, állapot nélkül, DI és I/O nélkül, hogy NUnit-tal állított értékekkel tesztelhetők
+legyenek.
+Egy ICalibrationService  + implementáció a DI-ba regisztrálva összegyűjti a
+bemeneteket a meglévő szolgáltatásokból (GPS, IMU, kormányzás, vezetés), és
+eredményként egy javaslat-DTO-t ad. Hogy a bemenetek mely interfészekből jönnek,
+azt az ügynök olvassa ki a forrásból.
+A javaslatot a kezelő hagyja jóvá, és a meglévő beállítási útvonalon ( config.set  a
+RemoteServerWiring.cs -ben, a ConfigurationStore  felé) kerül érvénybe.
+Az algoritmusok kódját az ügynök írja meg, ebben a szerkezetben. A dokumentum
+képletei, paraméterei és kódvázlatai kiindulópontok, nem kész kód. Az ügynök adhat
+saját példakódot (vázlatot) a javaslata mellett, de a végleges megvalósításnak a repó
+konvencióit kell követnie.
+A repó szabályai, amelyeket az ügynöknek be kell tartania (a CLAUDE.md -ből)
+Platformfüggetlen kód a Shared/ -be megy; DI-t és a GeometryMath -ot kell használni,
+nem új távolság/szög kódot írni.
+Lemezre vagy hálóra íráskor CultureInfo.InvariantCulture .
+AgOpenWeb – automatikus kalibrációs algoritmusok és AI-ügynöki megvalósítási terv
+Page 2 of 15
+
+=== PAGE 3 ===
+
+Minden új .cs / .js / .py  fájl // SPDX-License-Identifier: Apache-2.0  fejléccel
+indul (a Tools/license-headers.py  adja hozzá). Előbb a LICENSE.md -t el kell olvasni,
+mert a README és az oldalsáv licence eltér.
+A célszerű ciklusban (hot path) nem szabad új, ciklusonkénti munkát hozzáadni a
+HotPath  költségkeretek ellenőrzése nélkül: dotnet test
+Tests/AgOpenWeb.Services.Tests/ -c Release --filter TestCategory=HotPath .
+Az integráló tag (4.) és az EKF (6.) ezt érinti.
+Új webes funkció: app.js  küld transport.send('mything.do|arg') , a
+RemoteServerWiring.cs  egy VM-metódusra irányítja. Új állapot: Contracts.cs  →
+SceneProjector  → WireCodec.cs , ugyanabban a sorrendben dekódolva a
+transport.js -ben, majd app.js  kirajzolja. A vezérlést egyszerre egy kliens tartja; a
+megfigyelő parancsai elvesznek, hacsak az azonosító nincs az ObserverIds -ben (csak
+olyan parancs lehet, ami semmit sem változtat).
+A webes kliens sima HTML/JS, keretrendszer és build nélkül; a szövegeket tr('…') -
+vel kell átvezetni, aztán Tools/i18n-extract.py .
+Előjel-konvenciók. Ez a leggyakoribb hibaforrás: a modulok a lenti konvenciót használják,
+és az ügynöknek minden sort ellenőriznie kell az AgOpenWeb kódjában, mielőtt a modult
+beköti.
+Mennyiség Konvenció a modulokban Ellenőrzés az AgOpenWeb-
+ben
+Oldalirányú eltérés
+( lateralDevM )
+a nyers antennapozíció eltérése
+az AB vonaltól, balra pozitív az
+A→B irányhoz képest
+egyezzen a Track
+keresztirányú hibájának
+előjelével
+Haladási irány
+( directionSign )
++1 A→B, −1 B→A a Track  irányából
+számolódik
+Roll pozitív, ha a jármű a saját bal
+oldalára dől
+VirtualModules-szal állított
+dőlés, majd valós döntés
+balra
+Antenna oldaleltolás balra pozitív a nyom közepétől mérőszalaggal, és a Vehicle
+konfiguráció mezőinek
+jelentésével
+Kormányszög balra pozitív, fokban a modul visszajelzésének
+előjelével
+AgOpenWeb – automatikus kalibrációs algoritmusok és AI-ügynöki megvalósítási terv
+Page 3 of 15
+
+=== PAGE 4 ===
+
+Tesztelési sorrend minden algoritmusra: (1) NUnit-egységteszt szimulált, ismert
+paraméterekkel és több véletlen maggal; (2) a Simulators/AgOpenWeb.VirtualModules
+virtuális modulokkal; (3) asztali próba a valós modulokkal, a traktor felbákolva; (4) a
+terepen, üres területen, alacsony sebességgel. Egyik lépés sem hagyható ki a következő
+előtt.
+1. Antenna oldaleltolás és magasság automatikus kalibrációja
+Ez a legfőbb a csatlakozó sor elcsúszására: oda-vissza menetből kiszámolja, mennyire van
+az antenna a nyom közepétől oldalra, és milyen magasan van.
+Mit old meg. Egy dőlő traktoron a magasan lévő antenna oldalra kitér (h · sin(roll)). Ha az
+antenna oldaleltolása vagy magassága rossz, a hiba a haladási iránytól függ, ezért oda-
+vissza menetnél nem átlódik ki, hanem megkétszeroződik, és a szomszédos sor
+elcsúszódik.
+Modell. A nyers antennapozíció oldalirányú eltérése az AB vonaltól:
+\mathrm{dev} = s\,\bigl(a + h\,\sin\varphi\bigr) + c
+itt s  = +1 A→B, −1 B→A haladásnál; φ  = roll (pozitív, ha a jármű a saját bal oldalára dől); a
+= antenna oldaleltolása (balra pozitív); h  = antennamagasság a dőlési tengely fölött; c  =
+a fizikai nyom helye az AB vonalhoz képest (zavaró paraméter, ezért kell ugyanazt a
+nyomot oda-vissza bejárni).
+Illesztés. Három ismeretlen ( a , h , c ), lineáris legkisebb négyzetekkel, a regresszorok
+[s, s·sin φ , 1] . Az oszlopokkal normalizált normálegyenletet Gauss–Jordan-nal oldja,
+és ha a legkisebb pivot 0,01 alatt van, a feladatot nem meghatározhatónak jelöli, mert
+ilyenkor h  és c  nem választható szét.
+Mikor fogadható el az eredmény (kapuk):
+legalább 100 minta mindkét irányban;
+a roll legalább 3°-ot változzon (sík és lejtős szakasz is legyen);
+Mennyiség Konvenció a modulokban Ellenőrzés az AgOpenWeb-
+ben
+Egységek méter, fok (a kódban radián a
+szögfüggvényeknél),
+másodperc, m/s
+AgOpenWeb – automatikus kalibrációs algoritmusok és AI-ügynöki megvalósítási terv
+Page 4 of 15
+
+=== PAGE 5 ===
+
+csak RTK Fix, legalább 0,5 m/s sebességgel, 1 m-nél kisebb oldalirányú eltéréssel.
+Javasolt szimulációs tesztek (az ügynök írja meg). Ismert a , h  és c  értékekből (például
+0,07 m, 2,85 m és 0,03 m) zajos mintákat kell generálni mindkét irányban, sík és lejtős
+szakasszal, több véletlen maggal, és ellenőrizni, hogy a becslés visszaadja őket. Két
+negatív eset is kell: állandó lejtő önmagában, illetve egyirányú menet esetén a becslőnek
+„nem meghatározható” választ kell adnia.
+Ügynöki lépések
+1. Keresd meg, hol számolódik a roll-korrekció és az antenna oldaleltolása. Az
+AntennaHeight  a ConfigStore.Vehicle -ben létezik; az oldaleltolás mezőjének nevét
+a forrásból kell kiolvasni.
+2. Ellenőrizd az előjeleket a Közös alapok táblázata szerint. A modulnak a nyers (korrekció
+nélküli) pozició kell. Ha a csővezeték csak korrigált pozíciót ad, vond vissza a jelenlegi
+korrekciót.
+3. Kösd be a mintavételezőt a GPS-frissítés kezelőjéhez: minden mintát add át a
+becslőnek. Az illesztés ne fusson a hot path-on, csak a kezelő kérésére.
+4. Az eredmény egy javaslat-struktúra: a , h , c , szórások, RMS, egy „meghatározható”
+jelző és egy üzenet, amely megmondja, mi hiányzik.
+5. Webes panel: indítás/leállítás, minták száma irányonként, a roll-tartomány, az
+eredmény, és egy „Alkalmaz” gomb, amely csak a kezelő jóváhagyásával ír a beállításba.
+6. Tesztek: a szimulációs esetek NUnit-ba átvive (ismert paraméter, több mag, a hiányzó
+adat esetei), majd VirtualModules -szal, hogy a roll-szimulációban az előjel is kijöjjön.
+Elfogadási kritérium. Szimulációban az eltolás hibája 1 cm, a magasságé 8 cm alatt. Valós
+traktoron az alkalmazás után az oda- és visszamenet eltérése ugyanazon a nyomon a
+korábbi töredékére csökkenjen. Valós mérés még nincs.
+Ismert korlát. A modellben nincs oldalcsúszás (side-slip). Lejtőn a traktor lecsúszódhat,
+ami nem irányfüggő, és torzíthatja h  becslését. Lassú, simá menetnél érdemes mérni; a
+csúszás kezelése a 4. algoritmus dolga.
+2. Kormányszög-szenzor (WAS) nullpont és erősítés
+A WAS nullpontját és skáláját a jármű tényleges kanyarodásából (yaw rate) becsüljük, így
+nem kell kézzel, aszfalton „nullra” állítani.
+AgOpenWeb – automatikus kalibrációs algoritmusok és AI-ügynöki megvalósítási terv
+Page 5 of 15
+
+=== PAGE 6 ===
+
+Mit old meg. Ha a WAS nullpontja elmászik, a rendszer „egyenesnek” egy kis szöget
+gondol. A szabályozó ezt részben kompenzálja, de a heading és a sor irányfüggően
+elcsúsznak, és a hiba a roll-hibával összekeveredik. A kalibráció az egyenes aszfalton
+végzett kézi nullpont-beállítást váltja ki.
+Modell. Első kerekes kormányzésű, nem csúklós jármű esetén a valós kormányszög δ  a
+tengelytávból L , a yaw rate-ből ω  és a sebességből v  számolható:
+\tan\delta_{\mathrm{true}} = \frac{L\,\omega}{v}
+A mért szög x ; a két mennyiség között lineáris kapcsolatot feltételezünk: atan(L· ω /v) =
+g·x + b . Az illesztés két ismeretlenje a meredekség g  és az eltolás b ; a nullpont −b /
+g , az erősítés (skála) g . Ha a szenzor skálája jó, g  ≈ 1.
+Mit kell adni neki:
+L  a tengelytáv (méterben, a jármű konfigurációjából);
+a mért kormányszög (fok) a kormánymodul visszajelzéséből;
+yaw rate: az IMU giroszkópból, ha van; ha nincs, két egymás utáni heading
+különbségéből az idővel osztva (±π-re normalizálva), ami lassú haladásnál zajos;
+sebesség (m/s) és roll (fok).
+Szűrők (a mintát eldobja, ha): a sebesség 1 m/s alatt van; |roll| > 3°; | ω | > 0,5 rad/s; | δ | >
+35°.
+Eredmény és kapuk. Legalább 300 használható minta kell. Az erősítés csak akkor
+megfigyelhető, ha a kormány legalább 8°-ot változott; ellenkező esetben csak a nullpontot
+adja, 1-es erősítést feltételezve, és ezt üzenetben jelzi.
+Javasolt szimulációs tesztek. Ismert nullpont és skálahiba (például 1,4° és 10%) esetén a
+becslés a nullpontot 0,15°-on belül, az erősítést 0,02-en belül adja vissza. Csak egyenes
+menetnél jelezze, hogy az erősítés nem meghatározható, és csak a fix erősítésű nullpontot
+adja.
+Ügynöki lépések
+1. Keresd meg, hol van a WAS nullpontja és skálája. Ha ez a kormánymodul saját beállítása,
+és PGN-csomaggal küldi a háttér ( IUdpCommunicationService , PGN.md ), akkor az
+„Alkalmaz” egy PGN-beállítás küldése, nem egy config.set . Ezt a forrásból kell
+eldönteni.
+2. Azonosítsd a mért kormányszög forrását (az IAutoSteerService  bemenete vagy a
+modul visszajelzése) és a tengelytáv mezőjét a járműprofilban.
+AgOpenWeb – automatikus kalibrációs algoritmusok és AI-ügynöki megvalósítási terv
+Page 6 of 15
+
+=== PAGE 7 ===
+
+3. Döntsd el a yaw rate forrását: az IMU-feldolgozást a repóban kell megtalálni (a
+CLAUDE.md  nem tárgyalja).
+4. Kösd be a mintavételezőt, az illesztés csak kérésre fusson.
+5. Webes varázsló: „Üres, sík területen 1,5–3 m/s-mal kanyarogj balra-jobbra ±10–15°-kal”,
+élő számláló a használható mintákról és a kormánytartományról, majd az eredmény és
+„Alkalmaz”.
+6. Tesztek: a szimulációs esetek (skálahiba, csak egyenes, kevés minta) NUnit-ba.
+Elfogadási kritérium. Szimulációban a nullpont 0,15°-on belül. Valós traktoron az
+alkalmazás után egyenes aszfalton a kormányszög 0° ± 0,5°, és egyenes menetnél a yaw
+rate nulla körül marad. Ez az utolsó még nincs mérve.
+Ismert korlát. Csak nem csúklós, Ackermann-kormányzésre érvényes, és lejtőn vagy
+csúszós talajon a yaw rate nem egyezik a geometriával, ezért a |roll| szűrő fontos.
+3. Kormányzás azonosítása (lépcsőválasz és holtjáték)
+Megméri, mennyit késik és mennyire lassú a kormányzás, és mennyi a holtjáték a
+kormányműben. Ez az egyetlen algoritmus, amelyik a kormányt is mozdítja, ezért a teszt
+csak a kezelő nyomva tartott gombjával fut, az eredmény pedig csak javaslat.
+Mit old meg. Ha a szabályzó nem ismeri a kormányzás késését, vagy túl agresszív
+(kígýzás), vagy túl lusta (a sor meghúzza a kanyar után). A kopott kormánymű holtjátéka
+ugyanazt a hibát okozza, mint a rossz nullpont, csak irányfüggően.
+Modell. Elsőrendű rendszer holtidővel. A Δ  nagyságú parancs-lépcső a t_s
+időpillanatban:
+y(t) = y_0 + K\,\Delta\,\Bigl(1 - e^{-(t - t_s - \theta)/\tau}\Bigr), \qquad 
+t > t_s + \theta
+θ  a holtidő, τ  az időállandó, K  az erősítés. A modul rácskereséssel keresi θ -t (0–0,8 s, 41
+lépés) és τ -t (0,03–3 s, 40 logaritmikus lépés), majd finomabb ráccsal pontosít. K  minden
+párra zárt alakban számolódik. A lépcső előtt legalább 10 mintát kér, hogy a szenzorzajt
+mérje, utána legalább 20-at, és |Δ|  legalább 1°.
+Sebességkorlát felismerése. Ha a szervo korlátozott sebességgel mozog, az elsőrendű
+modell nem érvényes. Javasolt módszer: a mért csúcssebesség és a modell kezdeti
+meredeksége ( K·Δ/ τ ) hányadosát kell nézni; ha ez egy küszöb alatt van, jelezni kell, hogy
+AgOpenWeb – automatikus kalibrációs algoritmusok és AI-ügynöki megvalósítási terv
+Page 7 of 15
+
+=== PAGE 8 ===
+
+ismételj kisebb lépcsővel. A küszöbre kiindulásnak kb. 0,7 való, de szimulációban és valós
+szervon be kell hangolni.
+Holtjáték. Beállt (statikus) pontokból, két irányból közelítve: mért = k·parancs + c +
+e·irány , ahol az irány +1, ha a parancsot alulról érte el, −1 ha felülről. A holtjáték
+szélessége −2·e . Legalább 4–4 pont kell a két irányból.
+Javasolt szimulációs tesztek: ismert holtidő, időállandó és erősítés (például 0,15 s, 0,25 s,
+0,97) visszaadása zajos lépcsőválaszból; sebességkorlátos szervo felismerése; ismert
+holtjáték (például 1,2°) visszaadása.
+Fontos mérési feltétel. A mintavételi sebesség határozza meg, mit lehet megmérni.
+Szimulációban 50 Hz-et javasolt használni. Ha a kormánymodul visszajelzése csak 10 Hz-en
+jön, a holtidő felbontása 0,1 s, ami egy 0,15 s-os holtidőhöz kevés. Az ügynök először a
+visszajelzés valós frekvenciáját mérje meg.
+Ügynöki lépések
+1. Olvasd ki az IAutoSteerService  kódjából, milyen útvonalon megy a parancsolt szög a
+modulig, és a mért szög vissza ( PGN.md ), és milyen frekvenciával.
+2. Első kiadás: a kezelő indítja, és a teszt szigorún korlátozott. A kezelő egy „Kormány-
+teszt” felületen, vészleállítással a kezében, a gép álló helyzetében vagy legfeljebb 1
+m/s-mal, nyomva tartva indítja a tesztet; a lépcső legfeljebb ±10°, kis lépésekkel
+kezdve.
+3. A tesztlépcsőt egy külön, szigorún korlátozott útvonalon kell kiadni (nyomva tartott
+gomb, szög- és sebességhatár, watchdog, a normál autosteer ne legyen egyszerre
+aktív). Ezt külön kell biztonsági szempontból átnézni, még mielőtt a modul kapcsolódik;
+lásd a Biztonság szakaszt.
+4. A minták: időbélyeg, parancs, mért szög. Az illesztés a teszt végén fut; az eredmény:
+holtidő, időállandó, erősítés, sebességkorlát-jelző, az illesztési hiba a zajhoz képest, és
+egy üzenet.
+5. A holtjátékot a beállt pontokból kell becsülni, külön mérési menetből.
+6. Az eredmény egy javaslat; az erősítés- és look-ahead paraméterek automatikus
+javaslata a későbbi lépés. Ökölszabályként a look-ahead távolság legalább v · ( θ  +
+τ )  legyen, de ez nincs igazolva, és a vezetés ( TrackGuidanceService )
+paraméterezését is ismerni kell hozzá.
+7. Tesztek: a szimulációs esetek (4 eset) NUnit-ba, majd VirtualModules -szal.
+AgOpenWeb – automatikus kalibrációs algoritmusok és AI-ügynöki megvalósítási terv
+Page 8 of 15
+
+=== PAGE 9 ===
+
+Elfogadási kritérium. Szimulációban a holtidő 30 ms-on, az időállandó 40 ms-on, az
+erősítés 0,02-on belül. Valós kormányon az ismételt mérések egymástól 20%-on belül
+egyezzenek (ez javasolt küszöb, nem mért), különben az érték nem használható. Ez még
+nincs mérve.
+4. Integráló tag anti-windup-pal az oldalcsúszás ellen
+Lejtőn, oldalszélben vagy oldalra húzó munkagépnél a traktor tartósan oldalra csúszódik.
+Egy tisztán arányos szabályzó (Stanley, Pure Pursuit) ilyenkor tartós hibával marad a
+vonaltól; az integráló tag ezt a tartós hibát nulla közelére viszi.
+Modell. A szabályzó a mért keresztirányú hiba e  helyett a korrigált e + c  értéket kapja.
+A korrekció c  lassan integrálja a hibát:
+c_{k+1} = \operatorname{clamp}\Bigl(c_k\,(1 - \lambda\,\Delta t) + 
+k_i\,e_k\,\Delta t,\; \pm c_{\max}\Bigr)
+Anti-windup: ha a kormány telítettégben van (a kívánt szög eléri a határt), az integrálás
+leáll, kivéve ha a hiba a korrekcióval ellentétes előjelű (ilyenkor lefelé integrál,
+„visszatekeri”). Emellett: kemény korlát ±c_max , opcionális szivárgás λ , nem integrál, ha
+|e| 0,5 m fölött van, ha nincs RTK Fix, ha az autosteer ki van kapcsolva, vagy ha a sebesség
+0,5 m/s alatt van.
+Alapértelmezett paraméterek a kódban: k_i  = 0,05 1/s, c_max  = 0,30 m, λ  = 0, e_max  =
+0,5 m. Az 1/ k_i  az integrálás időállandója; a kormányzás saját késleltetésénél legalább egy
+nagyságrenddel lassabbnak kell lennie, különben a hurok lengeni kezd.
+Javasolt szimulációs teszt: kinematikus traktor, Stanley-szabályzó, 0,15 s késleltetés,
+sebességkorlátos kormányzás, 0,12 m/s tartós oldalcsúszás. Várt eredmény: az integráló
+nélkül a tartós hiba a csúszássebesség és az erősítés hányadosa körül marad (itt kb. 12
+cm), az integrálóval 1,5 cm alá megy. Telített, 3 m-es indulásnál (±15° korlát) a feltételes
+integrálás kisebb túllövést adjon, mint a naiv, csak levágó integrátor, és 2 cm alá
+konvergáljon.
+Ügynöki lépések
+1. A TrackGuidanceService.cs -ben keresd meg, hol számolódik a keresztirányú hiba, és
+honnan jön a kormánytelítés jele (a jármű maximális kormányszöge a konfigurációban).
+2. Stanley-nél a korrekció a keresztirányú taghoz adódik, ugyanazzal az előjellel, mint a P-
+tag ( xte + correction ). Pure Pursuit-nál ez javaslat: a korrekció a célpont oldalirányú
+eltolása. Mindkét esetnél a létező kódot kell megnézni, ne feltételezd az előjelet.
+AgOpenWeb – automatikus kalibrációs algoritmusok és AI-ügynöki megvalósítási terv
+Page 9 of 15
+
+=== PAGE 10 ===
+
+3. Egy XteIntegrator  példány egy útkövetéshez; Reset()  új vonalra állásnál, a
+YouTurnStateMachine  állapotváltásainál (fordúló kezdete és vége), az autosteer ki- és
+bekapcsolásakor.
+4. A kapcsoló alapértelmezetten ki, a konfigurációban enable , k_i , c_max , λ . A webes
+felületen mutassa a tanult korrekciót centiméterben, és legyen rajta „Nullázás” gomb.
+A korrekciót ne mentse el újraindításokon át.
+5. Hot path: az Update  hívása ciklusonként O(1), de a CLAUDE.md  szerint a HotPath
+tesztek felülírják az új ciklusonkénti munkát. Futtasd a dotnet test
+Tests/AgOpenWeb.Services.Tests/ -c Release --filter TestCategory=HotPath
+parancsot; ha a költségkeret túllépve, ne emeld magadtól, hanem jelezd.
+6. Tesztek: zárt hurkú szimuláció NUnit-ban (kinematikus bicikli, késleltetés,
+sebességkorlátos kormányzás), álló oldalcsúszással, telített indulással, és az enable =
+false  eset, ahol a viselkedésnek pontosan a régiének kell lennie.
+Fontos kapcsolat az 1. algoritmussal. Az integráló a lassú tartós hibát elnyeli, ezért elfedi a
+rossz antennaeltolást és roll-korrekciót is. Az 1. algoritmus mérése közben az integrálót ki
+kell kapcsolni.
+Elfogadási kritérium. Szimulációban a tartós hiba 1,5 cm alatt, a HotPath  tesztek zöldek, a
+kikapcsolt állapot bitre azonos a korábbival. Valós lejtőn még nincs mérve.
+5. Drift-figyelő a szomszédos sorok eltérésére
+A drift-figyelő nem javít semmit, csak jelzi, ha a csatlakozó sorok lassan kezdenek elmenni,
+hogy tudd, mikor kell az 1. és 2. kalibrációt újra lefuttatni. Pontosan arra a hibára való, hogy
+a beállítás napokig jó, aztán lassan elromlik.
+Bemenet. Passzusonként egy előjeles oldalirányú eltérés d  (méter): mennyivel tér el a
+most bejárt sáv széle attól a helytől, ahol a szomszédos, korábbi sávnak csatlakoznia
+kellene (rés pozitív, átfedés negatív, vagy fordítva, ezt egyszer rögzíteni kell). Az ügynök
+feladata kitalálni, hogy a repó lefedés-szolgáltatása ( AgOpenWeb.Services , a CLAUDE.md
+szerint tartalmaz coverage-et) honnan adja a korábbi sáv szélét.
+Algoritmus. Exponenciális átlag, majd tartós küszöbtúllépés:
+\bar d_{k} = \bar d_{k-1} + \alpha\,(d_k - \bar d_{k-1}), \qquad 
+\text{riasztás, ha } |\bar d_k| > T \text{ legalább } n \text{ egymás utáni 
+frissítésnél}
+AgOpenWeb – automatikus kalibrációs algoritmusok és AI-ügynöki megvalósítási terv
+Page 10 of 15
+
+=== PAGE 11 ===
+
+Alapértelmezett: α  = 0,2, T  = 4 cm, n  = 3. Egyetlen rossz passzus nem riaszt, a tartós
+elmozdulás igen.
+Javasolt szimulációs tesztek: ±1 cm körüli zaj ne riasszon; a passzusonként 1 cm-rel
+nővekvő eltolás néhány frissítés után riasszon (kiinduló paraméterek: α  = 0,3, T  = 4 cm,
+n  = 3). Valós mezőn a küszöb induló érték; a munkagép szélességéhez és a megengedett
+átfedéshez kell igazítani.
+Diagnosztikai előjel-minta (hipotézis). A 1. szakasz modellje szerint az antenna- és roll-
+hiba irányfüggő: oda és vissza ellentétes előjelű eltérést ad. Ha az eltérés mindkét
+irányban azonos előjelű, a gyanú oldalcsúszás, szél, munkagép-húzás vagy a kormányzás.
+Ez a modellből következik, mezőn nem igazolt, ezért a felület csak „gyanú” szóval mutassa.
+A figyelő nem tudja megkülönböztetni, hogy a traktor vagy a munkagép az oka.
+Ügynöki lépések
+1. A lefedés-kódban keresd meg a korábbi sáv szélét, és számold ki passzusonként az
+előjeles d  mediant (nem átlagot, hogy egy fordúló vagy egy sziget ne vigye el).
+2. A frissítés egyszer hívódik passzusonként, nem ciklusonként, ezért a hot path-ot nem
+terheli.
+3. A webes felületen egy kis jelző (zöld, sárga, piros) és a simított érték centiméterben.
+Riasztásnál üzenet: „Ellenőrizd az antenna és a roll kalibrációt”. A figyelő semmit nem
+állít át.
+4. Passzusokat és értékeket naplózd mezőnként, hogy a drift időben is látható legyen; a
+napló formátuma ne az AgOpenGPS fájlformátum legyen.
+5. Tesztek: a szimulációs sorozatok (zaj, növekvő eltolás, egyetlen kilógó érték) NUnit-ba.
+Elfogadási kritérium. Szimulációban nincs hamis riasztás a zajra, és a növekvő eltolást a
+küszöb átlépése után néhány passzuson belül jelzi. Valós mezőn az első szezonban csak
+megfigyelő módban fusson, hogy a küszöböt a valós adatokhoz lehessen igazítani.
+6. Később: EKF, LQR/MPC és munkagép-eltolás
+Ez a három nagyobb munka, és csak akkor érdemes elkezdeni, ha az 1–5. algoritmus valós
+adaton már működik. A lent leírtak tervek, kód vagy szimuláció nincs hozzájuk.
+AgOpenWeb – automatikus kalibrációs algoritmusok és AI-ügynöki megvalósítási terv
+Page 11 of 15
+
+=== PAGE 12 ===
+
+6a. EKF állapotbecslő
+Cél. A GNSS pozíciót, az IMU giroszkópot, a kormányszöget és a keréksebességet egy
+szűrőben egyesíteni, online giroszkóp-eltolás (bias) becsléssel, hogy a heading ne
+csússzon el, és egy rossz GNSS-minta ne ugrassa meg a pozíciót.
+Terv (kézenfekvő kiindulás, nem végleges). Kis, 2D-s szűrővel kezdj: állapot [x, y, ψ ,
+v, b_ ψ ]  (pozíció, heading, sebesség, giroszkóp-bias). Predikció: bicikli-modell a mért yaw
+rate-tel. Frissítések: a GNSS pozíció (a vevő jelentett pontosságából képzett zajjal), a
+GNSS sebesség/irány, ha v  elég nagy, és a kormányszögből számolt yaw rate ( v·tan δ  /
+L ), ez utóbbi csak a 2. algoritmus után megbízható. Roll és pitch csak akkor kerüljenek
+bele, ha a repó jelenlegi IMU-felülírása ezt indokolja.
+Hibás minta kivágása. Innováció-kapu: a minta eldobva, ha a Mahalanobis-távolság egy χ ²
+küszöb fölött van (2 szabadságfokú pozíciónál a 99%-os érték 9,21).
+Ügynöki lépések
+1. Először olvasd ki, hogyan van most a heading és a roll egyesítve (az IMU-feldolgozást a
+CLAUDE.md  nem tárgyalja), és hol táplálja az eredményt az IAutoSteerService . Az
+EKF-nek ezt kell kiegészítenie vagy kiváltania, nem harmadik, párhuzamos útvonalként
+futnia.
+2. Írd meg a szűrőt függőségmentes osztályként, és először csak mellette futtasd
+(árnyékmód): a kimenet nem megy a vezérlésbe, csak naplózódik a jelenlegi heading
+mellett.
+3. A hot path költségkeretet mérd ( HotPath  tesztek). Egy 5 állapotú szűrő olcsó, de a
+repó saját tesztje dönt.
+4. Fix elvesztése: a kovariancia nőjjön, a szűrő jelezzen „romlott” állapotot, az autosteer
+lekapcsolási feltétele pedig emberé maradjon, ne a szűrőé.
+5. Tesztek: ismert valós pályára szimulált zajos GNSS, driftelő giroszkóp, kiesések; a
+mérőszám a heading- és pozícióhiba RMS és a konzisztencia (NEES). Az elfogadási
+küszöböket a jelenlegi rendszer hibájának megmérése után kell megadni, nem előre.
+6b. LQR/MPC szabályzó előrecsatolással
+Cél. A Stanley/Pure Pursuit helyett (vagy mellett) olyan szabályzó, amely ismeri a
+kormányzás késleltetését, és a görbületét előre veszi: az előrecsatolt kormányszög
+atan(L· κ ) , ahol κ  a pálya görbülete.
+Előfeltételek. A 3. algoritmus holtideje és időállandója érvényes (nem sebességkorlátos),
+a 2. algoritmus nullpontja be van állítva, és az EKF (6a) stabil heading-et ad.
+AgOpenWeb – automatikus kalibrációs algoritmusok és AI-ügynöki megvalósítási terv
+Page 12 of 15
+
+=== PAGE 13 ===
+
+Ügynöki lépések
+1. Az ITrackGuidanceService  újabb implementációjaként vagy másik választható
+módként; a Pure Pursuit és a Stanley maradjon az alapértelmezett. A pálya Track
+modell, nem ABLine .
+2. LQR: a hibadinamika [e_y, e_ ψ ]  állapotú lineáris modellje a kinematikus bicikliből; a
+késleltetést a modell bővítse. MPC: 2–3 másodperces horizont, kormányszög- és
+kormány-sebességhatár.
+3. Zárt hurkú szimuláció (kinematikus bicikli, késleltetés, sebességkorlátos kormányzás)
+a különböző kanyarsugarakra, a Stanley-hez viszonyítva. A küszöböt itt is a mért alap
+határozza meg.
+4. Az MPC számítási ideje a hot path-on kritikus lehet. Mérd le, mielőtt bármi mást tennel.
+6c. Munkagép oldaleltolás becslése
+Cél. Egy vontatott munkagép lejtőn oldalra csúszódik; a sor akkor pontos, ha a munkagép,
+nem a traktor, van a vonalon.
+Fontos határ. Munkagépen lévő pozíciószenzor nélkül az oldaleltolás csak közvetve
+látható, az 5. algoritmus csatlakozási hibáján keresztül. Egy második GNSS-vevő vagy
+szenzor a munkagépen közvetlen mérést adna.
+Terv. Kezdetben csak javaslat: a lassú, kiszűrt d̄ alapján egy lassú lépéssel ( offset +=
+μ·d̄, korlátozva) a munkagép eltolásának módosítását javasolja, a kezelő jóváhagyásával.
+Ez a terv nincs sem szimulálva, sem terepen kipróbálva, és a μ  mértékét mérni kell.
+Biztonság, bevezetési sorrend és nyitott kérdések
+Az algoritmusok csak javaslatot adnak, a beállítást a kezelő jóváhagyása után írja át. Az öt
+mutatott algoritmus közül csak a 3. mozdítja a kormányt.
+Biztonsági elvek
+Autosteer közben egyik algoritmus sem ír át beállítást. Alkalmazás előtt a régi érték
+elmentődik, és van „Visszatérés” gomb.
+A 3. algoritmus kormánylépcsője külön, korlátozott útvonalon fut: nyomva tartott gomb,
+legfeljebb ±10°, legfeljebb 1 m/s, watchdog, és a normál autosteer ne legyen egyszerre
+aktív. Ezt és a vészleállítás működését ember nézze át, mielőtt az első valós teszt lefut.
+Az integráló (4.) alapértelmezetten ki van kapcsolva; az EKF (6a) árnyékmódban indul.
+AgOpenWeb – automatikus kalibrációs algoritmusok és AI-ügynöki megvalósítási terv
+Page 13 of 15
+
+=== PAGE 14 ===
+
+A kalibrációs parancsok csak a vezérlő kliensről fogadhatók el, megfigyelőtől ne (a
+CLAUDE.md  szerint a vezérlést egyszerre egy kliens tartja, és a megfigyelő parancsai
+elvesznek, hacsak az ObserverIds -ben nincsenek).
+Valós tesztek: üres terület, alacsony sebesség, valaki a vészleállításnál.
+Mit kell megírnia az ügynöknek
+A szimulációkban a zaj legyen időben korrelált is, ne csak fehér zaj, mert a valódi RTK-hiba
+ilyen, és a valós szórás nagyobb lesz, mint a fehér zajjal mért.
+Bevezetési sorrend (minden lépés kapuja: az előző teljesül, és ember nézi át)
+1. Az ügynök megírja a számoló osztályokat és a hozzájuk tartozó NUnit-teszteket, és
+lefuttatja őket. Kapu: minden teszt zöld.
+2. Felderítő jelentés kódváltoztatás nélkül (lásd az alábbi első utasítást). Kapu: ember
+átnézi az előjeleket és a mezőneveket.
+3. a. algoritmus, mert ez érinti közvetlenül a csatlakozó sor elcsúszását. Kapu: NUnit,
+VirtualModules , asztali próba, aztán üres területen mérés.
+Algoritmus Megírandó Első gyors teszt
+1. Antenna oldaleltolás
+és magasság
+oldalirányú eltérés–roll illesztő
+(legkisebb négyzetek)
+kapukkal
+ismert a , h , c  visszaadása
+kétirányú, sík + lejtős adatból
+2. WAS nullpont és
+erősítés
+yaw rate alapú nullpont- és
+skálabecslő
+ismert nullpont és skálahiba
+visszaadása; csak egyenes
+menet jelzése
+3. Kormányzás
+azonosítása, holtjáték
+lépcsőválasz-illesztő,
+sebességkorlát-jelző, holtjáték-
+becslő
+ismert holtidő, időállandó,
+erősítés visszaadása;
+sebességkorlátos eset
+felismerése
+4. Integráló tag anti-windup-os integrátor a
+vezetésbe kötve
+zárt hurkú szimulációban a
+tartós hiba eltűnik; telített
+indulás
+5. Drift-figyelő passzusonkénti simítás +
+küszöb-riasztás
+zaj nem riaszt, növekvő eltolás
+riaszt
+6. EKF, LQR/MPC,
+munkagép
+később, a 6. szakasz terve
+szerint
+először árnyékmód, mérés a
+jelenlegi rendszerhez képest
+AgOpenWeb – automatikus kalibrációs algoritmusok és AI-ügynöki megvalósítási terv
+Page 14 of 15
+
+=== PAGE 15 ===
+
+4. e. algoritmus megfigyelő módban: olcsó, és valós adatot ad a driftről, amiből a többi
+küszöböt be lehet állítani.
+5. b. algoritmus (WAS).
+6. d. algoritmus (integráló), kikapcsolt állapotból.
+7. c. algoritmus, a biztonsági átnézés után.
+8. f. rész csak akkor, ha a mérések azt indokolják.
+Első utasítás az ügynöknek (másolható):
+Olvasd el az AgOpenWeb repó CLAUDE.md, CONTRIBUTING.md, LICENSE.md, PGN.md, 
+Plans/ARCHITECTURE.md
+és Docs/GPS_RECEIVERS.md fájlját. Ne módosíts kódot. Írj felderítő jelentést:
+(1) hol számolódik a roll, az antenna oldaleltolása és a heading, és hogyan 
+kerül a pozícióba;
+(2) az IAutoSteerService bemenetei, kimenetei és ciklusideje;
+(3) a kormánymodul PGN-jei: parancsolt és mért szög, beállítások, 
+visszajelzés frekvenciája;
+(4) a ConfigurationStore Vehicle mezői: tengelytáv, antennamagasság, antenna 
+oldaleltolás, max kormányszög;
+(5) a Track keresztirányú hibájának előjele;
+(6) hol van a lefedés (coverage) kódja, és hogyan lehet kiolvasni a 
+szomszédos sáv szélét;
+(7) a licenc (Apache-2.0 vagy GPL v3) és a SPDX-fejléc szabálya.
+A jelentés végén sorold fel, mit nem találtál meg, majd várj jóváhagyásra.
+Nyitott kérdések
+Licenc: a repó oldalsávja Apache-2.0-t mutat, a README GPL v3.0-ra hivatkozik. A kód
+bekerülése előtt tisztázni kell.
+Az IMU/roll feldolgozás, az IAutoSteerService  részletei és a PGN-formátum
+olvasatlanok, ezek döntik el az 1., 2. és 3. algoritmus beillesztését.
+A Plans/  és Docs/  tartalmához nem fértem hozzá (a GitHub robots-szabálya tiltja),
+az ügynök a helyi másolatból olvassa.
+A hardver (F9P vevő, a kormánymodul típusa) befolyásolja, milyen PGN-ek és milyen
+frekvenciák elérhetők, ez a felderítő jelentésben dől el.
+A repó karbantartójával érdemes egyeztetni, mielőtt nagyobb módosítás kerül a
+repóba; a részletes szabályok a CONTRIBUTING.md -ben vannak, amit nem olvastam el.
+AgOpenWeb – automatikus kalibrációs algoritmusok és AI-ügynöki megvalósítási terv
+Page 15 of 15

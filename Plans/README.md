@@ -4,6 +4,7 @@ Work being done or agreed, one file per plan. Each starts with a **Status** line
 
 | Plan | Status |
 |---|---|
+| [CALIBRATION_ALGORITHM_1_ANTENNA.md](CALIBRATION_ALGORITHM_1_ANTENNA.md) | Calculator + tests landed; pipeline/UI wiring, gate: sign review |
 | [GPS_RECEIVER_SENTENCES_PLAN.md](GPS_RECEIVER_SENTENCES_PLAN.md) | In progress: receivers straight to the app |
 | [ISOBUS_VT_TRANSPORTS.md](ISOBUS_VT_TRANSPORTS.md) | In progress: how the VT reaches the implement bus |
 | [JOB_FINISH_LOCK_IMPLEMENT_PLAN.md](JOB_FINISH_LOCK_IMPLEMENT_PLAN.md) | Agreed, not started: implement on the job, Finish locks it |
