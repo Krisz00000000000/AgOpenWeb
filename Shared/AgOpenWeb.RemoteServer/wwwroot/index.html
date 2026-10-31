@@ -2963,13 +2963,18 @@
     </div>
     <div class="sw-info">Step 1 is live. The greyed entries are the next steps of the calibration plan; each becomes available as its own algorithm lands.</div>
   </div>
-  <!-- Calibration → Antenna offset & height (algorithm 1). Watch-the-tractor: opts out of
-       the light-dismiss scrim so the map stays interactive while recording. Back returns to
-       the Calibration menu, ✕ closes to the map. Apply writes AntennaOffset/AntennaHeight
-       through config.set — the ordinary save path; Revert puts the previous values back. -->
+  <!-- Calibration → Antenna offset & height (algorithm 1) as a guided wizard. The operator
+       never opens a field or a track by hand: Start creates a temporary field (deleted again
+       by Finish) and a button creates the AB line where the vehicle is pointing. Steps:
+       1 field, 2 line, 3 drive A→B, 4 drive back, 5 roll spread, 6 result. Watch-the-tractor:
+       out of the light-dismiss scrim so the map stays interactive. -->
   <div id="cal1" class="ln-panel sw-panel">
     <div class="ln-hdr"><button class="ln-x" id="cal1-back" title="Back">←</button><span class="ln-hdr-title">Antenna offset &amp; height</span><button class="ln-x ln-closex" id="cal1-x" title="Close">✕</button></div>
-    <div class="sw-status">Status: <b id="cal1-status">Stopped</b></div>
+    <div class="sw-status">Step <b id="cal1-step">1</b> of 6 · <b id="cal1-stepname">Field</b></div>
+    <div class="sw-info" id="cal1-instruction"></div>
+    <div class="sw-btns" id="cal1-setupbtns">
+      <button id="cal1-mktrack" class="sw-b sw-blue rn-gated">Create AB line here</button>
+    </div>
     <div class="sw-card">
       <div class="sw-cardtitle">Recording</div>
       <div class="sw-row"><span class="k">Samples A→B</span><span class="v" id="cal1-forward">0</span></div>
@@ -2988,10 +2993,11 @@
     <div class="sw-info" id="cal1-message"></div>
     <div class="sw-btns">
       <button id="cal1-reset" class="sw-b sw-grey rn-gated" data-cmd="calibration.reset">Reset</button>
-      <button id="cal1-start" class="sw-b sw-green rn-gated" data-cmd="calibration.start|1">Start</button>
+      <button id="cal1-start" class="sw-b sw-green rn-gated">Start</button>
       <button id="cal1-stop" class="sw-b sw-grey rn-gated" data-cmd="calibration.stop">Stop</button>
       <button id="cal1-apply" class="sw-b sw-blue rn-gated">Apply</button>
       <button id="cal1-revert" class="sw-b sw-grey rn-gated">Revert</button>
+      <button id="cal1-finish" class="sw-b sw-grey rn-gated">Finish</button>
     </div>
   </div>
   <!-- Steer Wizard — full-screen, host-driven. The real SteerWizardViewModel runs on

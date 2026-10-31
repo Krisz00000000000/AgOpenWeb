@@ -1,10 +1,11 @@
 # Automatic calibration — algorithm 1: antenna lateral offset and height
 
 **Status:** calculator + tests + **the Calibration menu in the web UI** landed; all calibration
-tests green. Algorithm 1 (antenna offset + height) records and proposes live; algorithms 2–6
-are listed in the menu, greyed out, waiting for their own steps. Nothing is applied without
-the operator: Apply writes the two vehicle fields through the ordinary `config.set` path, and
-Revert puts the previous values back. No field measurement has run yet.
+tests green. Algorithm 1 (antenna offset + height) runs as a guided six-step wizard: it creates
+its own temporary field and AB line, records, and proposes live; algorithms 2–6 are listed in the
+menu, greyed out, waiting for their own steps. Nothing is applied without the operator: Apply
+writes the two vehicle fields through the ordinary `config.set` path, and Revert puts the previous
+values back. No field measurement has run yet.
 
 Source: *„AgOpenWeb – automatikus kalibrációs algoritmusok és AI-ügynöki megvalósítási
 terv"* (Hungarian, 2026-10-31), sections *Közös alapok* and *1. Antenna oldaleltolás és
@@ -194,24 +195,29 @@ A new left-nav button (crosshair icon) opens **Calibration**, a fly-out listing 
 algorithms. Only entry 1 is live; 2–6 are greyed placeholders, so the menu is final and each
 algorithm drops into its own entry without moving anything.
 
-**Entry 1 — Antenna offset & height** (`#cal1`; a chain panel outside the light-dismiss scrim so
-the map can be watched while recording):
+**Entry 1 — Antenna offset & height** is a six-step wizard. The operator never opens a field or a
+track by hand; only the driving is theirs:
 
-| Element | What it shows |
-|---|---|
-| Status | Recording / Stopped |
-| Samples A→B, Samples B→A | usable samples per direction (gate: 100 each) |
-| Roll range | peak-to-peak roll covered (gate: 3°) |
-| Last sample | "accepted", or why the last one was dropped (no RTK Fixed, under 0.5 m/s, over 1 m off the line) |
-| Antenna offset / height | the proposal, with ± standard error |
-| Current setting | what `Vehicle.AntennaOffset` / `AntennaHeight` hold now, for comparison |
-| Message | the fit's own explanation ("both driving directions are needed…", "the roll never varied…", gate warnings) |
+| Step | What the wizard does / asks | Gate to move on |
+|---|---|---|
+| 1 Field | **Start** creates a temporary field at the current position (`Calibration <date time>`) unless one is already open | a field is open |
+| 2 AB line | one button, **Create AB line here**, makes the ordinary Quick AB at the vehicle's heading — the line the calibration measures against | a guidance line is active |
+| 3 Drive A→B | "drive along the line with autosteer on" | 100 usable samples that way |
+| 4 Drive back | "turn around and drive back on the same wheel track" | 100 usable samples the other way |
+| 5 Roll | "part on a slope, part on the flat" | 3° of roll covered |
+| 6 Result | the proposal (± standard errors) next to the current setting → **Apply**, then **Finish** | fit accepted |
 
-Buttons: **Start** (`calibration.start|1`), **Stop**, **Reset** — gated on the host (every
-command needs control) and disabled client-side without it; **Apply** (two `config.set` writes,
-`vehicle.antennaOffset` + `vehicle.antennaHeight`, enabled only when the fit is accepted) and
-**Revert** (writes back the values Apply replaced). Nothing is written while the operator is not
-looking — Apply is a human action.
+Live on the panel at every step: usable samples per direction, the roll spread, why the last
+sample was dropped (no RTK Fixed, under 0.5 m/s, over 1 m off the line), and the fit's own
+explanation. The step comes from `CalibrationWizard` — a pure function of "field open?", "line
+active?", the two counters and the roll spread — so only one thing is ever asked at a time; the
+client owns the wording, keyed by the step ("field", "track", "forward", "reverse", "roll",
+"result") and translated through `tr()`.
+
+**Finish** stops the recording and deletes the temporary field — but only one the wizard created
+itself; a field the operator had open is left alone (the host remembers only what it made).
+**Apply** writes `vehicle.antennaOffset` + `vehicle.antennaHeight` through the ordinary `config.set`
+path; **Revert** writes the previous values back. Nothing is written without the operator.
 
 Sampling runs on the UI thread inside `ApplyGpsCycleResult`, one sample per GPS cycle (10 Hz),
 from the **raw** antenna position the pipeline now carries in `GpsCycleResult`

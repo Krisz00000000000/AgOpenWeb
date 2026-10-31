@@ -2497,10 +2497,44 @@ document.getElementById('cl-antenna').addEventListener('pointerdown', e => {
 document.getElementById('cal1-back').addEventListener('pointerdown', e => {
   e.stopPropagation(); lnOpen('calibration', 'ln-calibration');
 });
-for (const id of ['cal1-reset', 'cal1-start', 'cal1-stop'])
+for (const id of ['cal1-reset', 'cal1-stop'])
   document.getElementById(id).addEventListener('pointerdown', e => {
     e.stopPropagation(); rnSend(document.getElementById(id).dataset.cmd);
   });
+// Start also prepares the ground: the host creates a temporary field if none is open
+// (a no-op otherwise), so the operator never has to open a field by hand.
+document.getElementById('cal1-start').addEventListener('pointerdown', e => {
+  e.stopPropagation();
+  if (!iHoldControl) return;
+  rnSend('calibration.wizard.field');
+  rnSend('calibration.start|1');
+});
+document.getElementById('cal1-mktrack').addEventListener('pointerdown', e => {
+  e.stopPropagation(); rnSend('calibration.wizard.track');
+});
+// Finish stops the recording and deletes the temporary field the wizard created (never the
+// operator's own field — the host only remembers what it made itself).
+document.getElementById('cal1-finish').addEventListener('pointerdown', e => {
+  e.stopPropagation(); rnSend('calibration.wizard.finish'); cal1Prev = null;
+});
+// Wizard wording: the host sends a stable step key, the client owns the text (and so the
+// translation — tr() here is what puts these into i18n/en.json).
+const CAL_STEP_TITLE = {
+  field: tr('Field'),
+  track: tr('AB line'),
+  forward: tr('Drive A->B'),
+  reverse: tr('Drive back'),
+  roll: tr('Roll'),
+  result: tr('Result'),
+};
+const CAL_STEP_HINT = {
+  field: tr('Create a temporary field for the calibration. Start does it for you and Finish deletes it again — your own fields are never touched.'),
+  track: tr('Point the vehicle along the pass you want to drive, then press Create AB line here. That line is what the calibration measures against.'),
+  forward: tr('Drive along the line with autosteer on. {n} of 100 samples in this direction.'),
+  reverse: tr('Turn around and drive back on the same wheel track, autosteer on. {n} of 100 samples.'),
+  roll: tr('Drive part of the run on a slope and part on the flat — the antenna height needs the vehicle to tilt (3° of roll).'),
+  result: tr('Recording is complete. Check the proposal, then Apply. Finish deletes the temporary field.'),
+};
 document.getElementById('cal1-apply').addEventListener('pointerdown', e => {
   e.stopPropagation();
   const s = statusBar;
@@ -2528,7 +2562,12 @@ function calM(v) {
 }
 function populateCal1() {
   const s = statusBar; if (!s) return;
-  asSetText('cal1-status', s.calRecording ? tr('Recording') : tr('Stopped'));
+  // Which wizard step the host says we are on, and its guidance text.
+  const key = CAL_STEP_HINT[s.calStepKey] ? s.calStepKey : 'field';
+  asSetText('cal1-step', String(s.calStep || 1));
+  asSetText('cal1-stepname', CAL_STEP_TITLE[key]);
+  const count = key === 'reverse' ? (s.calReverse || 0) : (s.calForward || 0);
+  asSetText('cal1-instruction', tr(CAL_STEP_HINT[key], { n: count }));
   asSetText('cal1-forward', String(s.calForward || 0));
   asSetText('cal1-reverse', String(s.calReverse || 0));
   asSetText('cal1-roll', (s.calRollRange || 0).toFixed(1) + '°');
@@ -2541,7 +2580,11 @@ function populateCal1() {
   const v = (config && config.vehicle) || {};
   asSetText('cal1-current',
     calM(v.antennaOffset || 0) + ' / ' + calM(v.antennaHeight || 0));
-  asSetText('cal1-message', s.calMessage || tr('Drive the same wheel track in both directions, part on a slope and part flat, with autosteer following the line. 100 usable samples per direction and a 3° roll change are required.'));
+  asSetText('cal1-message', s.calMessage || '');
+  // Only the current step's own setup button is shown (the AB line is placed where the
+  // vehicle stands, so it belongs to its step).
+  const trackBtn = document.getElementById('cal1-mktrack');
+  if (trackBtn) trackBtn.style.display = key === 'track' ? '' : 'none';
   // Buttons: host-gated by control; per-button state mirrors the recording/proposal.
   const gate = (id, ok) => {
     const el = document.getElementById(id);
@@ -2552,6 +2595,8 @@ function populateCal1() {
   gate('cal1-stop', !!s.calRecording);
   gate('cal1-apply', !!s.calAccepted);
   gate('cal1-revert', !!cal1Prev);
+  gate('cal1-finish', true);
+  gate('cal1-mktrack', !s.calRecording || key === 'track');
 }
 document.getElementById('rc-back').addEventListener('pointerdown', e => {
   e.stopPropagation(); lnOpen('tools', 'ln-tools', renderToolsPanel);

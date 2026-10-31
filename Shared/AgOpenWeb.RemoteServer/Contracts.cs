@@ -337,7 +337,11 @@ public record StatusDto(
     double CalOffsetStdDevMeters = 0,
     double CalHeightStdDevMeters = 0,
     string CalMessage = "",
-    string CalReject = "");
+    string CalReject = "",
+    // Wizard step the operator is on (1 field, 2 line, 3 A→B, 4 B→A, 5 roll spread, 6 result)
+    // and its stable key, so the client owns the wording and its translation.
+    int CalStep = 1,
+    string CalStepKey = "field");
 
 /// <summary>What the field data card shows beyond the worked area the status frame already
 /// carries: the boundary area less inner boundaries (0 = no boundary), the ground covered

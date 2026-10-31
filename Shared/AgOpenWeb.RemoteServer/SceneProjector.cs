@@ -463,7 +463,9 @@ public sealed class SceneProjector
             cal.RollRangeDegrees, cal.IsDeterminate, cal.IsAccepted,
             cal.LateralOffsetMeters, cal.HeightMeters,
             cal.LateralOffsetStdDevMeters, cal.HeightStdDevMeters,
-            cal.Message, cal.LastRejectReason);
+            cal.Message, cal.LastRejectReason,
+            // Guided wizard step + its stable key.
+            cal.Step, cal.StepKey);
     }
 
     // The NTRIP session for the Network IO card, read live for every status frame.

@@ -146,5 +146,16 @@ public partial class MainViewModel
         cal.ForwardSamples = _antennaCalibration.ForwardCount;
         cal.ReverseSamples = _antennaCalibration.ReverseCount;
         cal.RollRangeDegrees = _antennaCalibration.RollRangeDegrees;
+
+        // Which guided step the operator is on. Field/line come from the app's own state, so
+        // the wizard follows whatever the operator (or the wizard itself) just created.
+        var stage = CalibrationWizard.Evaluate(
+            State.Field.ActiveField is not null,
+            State.Field.ActiveTrack is not null,
+            cal.ForwardSamples,
+            cal.ReverseSamples,
+            cal.RollRangeDegrees);
+        cal.Step = CalibrationWizard.StepNumber(stage);
+        cal.StepKey = CalibrationWizard.Key(stage);
     }
 }

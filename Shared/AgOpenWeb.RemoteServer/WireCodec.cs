@@ -865,6 +865,9 @@ public static class WireCodec
         w.Write((float)s.CalHeightStdDevMeters);
         WriteStr(w, s.CalMessage);
         WriteStr(w, s.CalReject);
+        // Wizard step + its key (append-only).
+        w.Write(s.CalStep);
+        WriteStr(w, s.CalStepKey);
         return ms.ToArray();
     }
 

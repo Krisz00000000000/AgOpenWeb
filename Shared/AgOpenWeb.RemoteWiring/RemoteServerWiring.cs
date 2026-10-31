@@ -43,6 +43,9 @@ public static partial class RemoteServerWiring
         // Was the App instance field _remoteWizardActive; now a captured local
         // shared by the command-handler and wizard-projector closures below.
         bool wizardActive = false;
+        // Name of the throw-away field the calibration wizard created (null = it did not
+        // create one, so it must never delete the operator's field).
+        string? calibrationTempField = null;
 
                     // The ISOBUS virtual terminal (VT card), when this head has one.
                     var vt = services.GetService<IVirtualTerminalService>();
@@ -589,6 +592,33 @@ public static partial class RemoteServerWiring
                                 case "calibration.reset":
                                     vm.ResetAutomaticCalibration();
                                     return;
+                                // Wizard setup steps: the operator never opens a field or a track by
+                                // hand. The field is created once, named, and deleted again by
+                                // calibration.wizard.finish (only if this wizard made it); the line
+                                // is the ordinary Quick AB at the vehicle's heading.
+                                case "calibration.wizard.field":
+                                {
+                                    if (vm.HasActiveField) return; // use the open field, never delete it
+                                    calibrationTempField = FormattableString.Invariant(
+                                        $"Calibration {DateTime.Now:yyyy-MM-dd HH-mm}");
+                                    ApplyFieldCommand(vm, "field.new", calibrationTempField);
+                                    return;
+                                }
+                                case "calibration.wizard.track":
+                                    vm.CreateAPlusLine(null); // Quick AB along the vehicle's heading
+                                    return;
+                                case "calibration.wizard.finish":
+                                {
+                                    vm.StopAutomaticCalibration();
+                                    if (calibrationTempField is { } tempField)
+                                    {
+                                        // Close then delete, the order the field manager requires.
+                                        ExecCmd(vm.CloseFieldCommand);
+                                        ApplyFieldCommand(vm, "field.deleteField", tempField);
+                                        calibrationTempField = null;
+                                    }
+                                    return;
+                                }
                                 // --- Steer Wizard (host-driven). The real SteerWizardViewModel
                                 // runs here; the browser forwards nav + edits + actions. Only
                                 // wizard.action (calibration/actuation) is Tier-2 gated. ---

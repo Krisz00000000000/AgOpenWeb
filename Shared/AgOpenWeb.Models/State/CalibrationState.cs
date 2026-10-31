@@ -23,6 +23,14 @@ public class CalibrationState
     /// <summary>True between Start and Stop.</summary>
     public bool IsRecording { get; set; }
 
+    /// <summary>1-based wizard step the operator is on (1 field, 2 line, 3 A→B, 4 B→A,
+    /// 5 roll spread, 6 result). Computed by CalibrationWizard from the live state.</summary>
+    public int Step { get; set; }
+
+    /// <summary>Stable key of that step ("field", "track", "forward", "reverse", "roll",
+    /// "result") — the client owns the wording and its translation.</summary>
+    public string StepKey { get; set; } = "field";
+
     /// <summary>Usable samples recorded driving the track's recorded A→B order.</summary>
     public int ForwardSamples { get; set; }
 
