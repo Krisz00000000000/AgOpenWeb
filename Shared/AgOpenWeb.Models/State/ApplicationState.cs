@@ -44,6 +44,10 @@ public class ApplicationState : ObservableObject
     public RecordedPathState RecordedPath { get; } = new();
     public BoundaryRecState BoundaryRec { get; } = new();
     public UIState UI { get; } = new();
+    // Automatic calibration panel (Calibration menu): live recording/fit mirror. Written by
+    // MainViewModel, projected into the Status frame by SceneProjector; the math lives in
+    // AgOpenWeb.Services.Calibration.
+    public CalibrationState Calibration { get; } = new();
 
     // Global events
     public event EventHandler? StateReset;

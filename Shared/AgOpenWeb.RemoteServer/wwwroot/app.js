@@ -2389,13 +2389,13 @@ document.getElementById('dlg-tracks-close').addEventListener('pointerdown', e =>
 // to ConfigurationStore). Grows one entry per sub-phase.
 // Navigation: top-level buttons open a panel; sub-panels (vehicle/tool config) are
 // reached from the hub and carry a Back button. One panel open at a time.
-const LN_NAV_PANELS = ['screenalerts', 'tools', 'rollcorr', 'fieldtools', 'fieldbuilder', 'offsetfix', 'importtracks', 'recpath', 'boundarymenu', 'boundaryplayer', 'kmlboundary', 'vehtoolhub', 'vehiclecfg', 'toolcfg', 'autosteercfg', 'networkio', 'ntripsettings', 'systemdata', 'ntripprofiles', 'ntripeditor', 'smartwas', 'fieldops', 'fieldsandjobs', 'newfield', 'fromexisting', 'isoimport', 'kmlimport', 'resumejob', 'agsettings', 'agupload', 'agdownload', 'filemenu', 'appsettings', 'language', 'viewsettings', 'logviewer', 'hotkeys', 'help', 'about', 'bugreport'];
+const LN_NAV_PANELS = ['screenalerts', 'tools', 'calibration', 'cal1', 'rollcorr', 'fieldtools', 'fieldbuilder', 'offsetfix', 'importtracks', 'recpath', 'boundarymenu', 'boundaryplayer', 'kmlboundary', 'vehtoolhub', 'vehiclecfg', 'toolcfg', 'autosteercfg', 'networkio', 'ntripsettings', 'systemdata', 'ntripprofiles', 'ntripeditor', 'smartwas', 'fieldops', 'fieldsandjobs', 'newfield', 'fromexisting', 'isoimport', 'kmlimport', 'resumejob', 'agsettings', 'agupload', 'agdownload', 'filemenu', 'appsettings', 'language', 'viewsettings', 'logviewer', 'hotkeys', 'help', 'about', 'bugreport'];
 // Watch-the-tractor panels opt OUT of the light-dismiss scrim — the map must stay
 // interactive (pan/zoom to follow the tractor while capturing). They close only via
 // the header (Back / ✕).
 // The bug report panel too: leave it open while driving and press the button the
 // moment a problem shows, since the dump holds only the last 60 s of GPS data.
-const NO_SCRIM = new Set(['smartwas', 'recpath', 'boundaryplayer', 'fieldbuilder', 'bugreport', 'ntripsettings', 'ntripprofiles', 'ntripeditor']);
+const NO_SCRIM = new Set(['smartwas', 'cal1', 'recpath', 'boundaryplayer', 'fieldbuilder', 'bugreport', 'ntripsettings', 'ntripprofiles', 'ntripeditor']);
 const lnScrim = document.getElementById('ln-scrim');
 function lnCloseAll() {
   for (const id of LN_NAV_PANELS) document.getElementById(id).classList.remove('open');
@@ -2408,6 +2408,7 @@ function lnCloseAll() {
   document.getElementById('ln-filemenu').classList.remove('active');
   document.getElementById('ln-tools').classList.remove('active');
   document.getElementById('ln-fieldtools').classList.remove('active');
+  document.getElementById('ln-calibration').classList.remove('active');
 }
 function lnOpen(panelId, navBtnId, onOpen) {
   // Opening a menu leaves an AB line being drawn on the map, like Esc (#399).
@@ -2479,6 +2480,79 @@ document.getElementById('lv-back').addEventListener('pointerdown', e => {
 document.getElementById('tl-rollcorr').addEventListener('pointerdown', e => {
   e.stopPropagation(); lnOpen('rollcorr', 'ln-tools', renderRollCorr);
 });
+// ---- Calibration menu (automatic calibration plan) --------------------------------------
+// The host records the samples and fits them (Services/Calibration); this panel only shows
+// the Status-frame snapshot and forwards start/stop/reset. Apply writes the two vehicle
+// fields through the ordinary config.set path (needs control), remembering the previous
+// values so Revert can put them back.
+let cal1Prev = null;
+document.getElementById('ln-calibration').addEventListener('pointerdown', e => {
+  e.stopPropagation();
+  const open = ['calibration', 'cal1'].some(id => document.getElementById(id).classList.contains('open'));
+  if (open) lnCloseAll(); else lnOpen('calibration', 'ln-calibration');
+});
+document.getElementById('cl-antenna').addEventListener('pointerdown', e => {
+  e.stopPropagation(); lnOpen('cal1', 'ln-calibration', populateCal1);
+});
+document.getElementById('cal1-back').addEventListener('pointerdown', e => {
+  e.stopPropagation(); lnOpen('calibration', 'ln-calibration');
+});
+for (const id of ['cal1-reset', 'cal1-start', 'cal1-stop'])
+  document.getElementById(id).addEventListener('pointerdown', e => {
+    e.stopPropagation(); rnSend(document.getElementById(id).dataset.cmd);
+  });
+document.getElementById('cal1-apply').addEventListener('pointerdown', e => {
+  e.stopPropagation();
+  const s = statusBar;
+  if (!iHoldControl || !s || !s.calAccepted) return;
+  cal1Prev = {
+    offset: (config && config.vehicle && config.vehicle.antennaOffset) || 0,
+    height: (config && config.vehicle && config.vehicle.antennaHeight) || 0,
+  };
+  cfgSend('vehicle.antennaOffset', s.calOffset.toFixed(3));
+  cfgSend('vehicle.antennaHeight', s.calHeight.toFixed(3));
+});
+document.getElementById('cal1-revert').addEventListener('pointerdown', e => {
+  e.stopPropagation();
+  if (!iHoldControl || !cal1Prev) return;
+  cfgSend('vehicle.antennaOffset', cal1Prev.offset.toFixed(3));
+  cfgSend('vehicle.antennaHeight', cal1Prev.height.toFixed(3));
+  cal1Prev = null;
+});
+// Metres with the app's unit preference (the config frame carries SI; only the display
+// converts), and a NaN-safe standard error.
+function calM(v) {
+  if (!Number.isFinite(v)) return '—';
+  const imperial = statusBar && statusBar.isMetric === false;
+  return imperial ? (v / 0.3048).toFixed(2) + ' ft' : v.toFixed(3) + ' m';
+}
+function populateCal1() {
+  const s = statusBar; if (!s) return;
+  asSetText('cal1-status', s.calRecording ? tr('Recording') : tr('Stopped'));
+  asSetText('cal1-forward', String(s.calForward || 0));
+  asSetText('cal1-reverse', String(s.calReverse || 0));
+  asSetText('cal1-roll', (s.calRollRange || 0).toFixed(1) + '°');
+  asSetText('cal1-reject', s.calReject ? tr('rejected:') + ' ' + s.calReject : tr('accepted'));
+  const hasFit = !!s.calDeterminate && Number.isFinite(s.calOffset) && Number.isFinite(s.calHeight);
+  asSetText('cal1-offset', hasFit ? calM(s.calOffset) : '—');
+  asSetText('cal1-height', hasFit ? calM(s.calHeight) : '—');
+  asSetText('cal1-offsetsd', hasFit && Number.isFinite(s.calOffsetSd) ? '± ' + calM(s.calOffsetSd) : '—');
+  asSetText('cal1-heightsd', hasFit && Number.isFinite(s.calHeightSd) ? '± ' + calM(s.calHeightSd) : '—');
+  const v = (config && config.vehicle) || {};
+  asSetText('cal1-current',
+    calM(v.antennaOffset || 0) + ' / ' + calM(v.antennaHeight || 0));
+  asSetText('cal1-message', s.calMessage || tr('Drive the same wheel track in both directions, part on a slope and part flat, with autosteer following the line. 100 usable samples per direction and a 3° roll change are required.'));
+  // Buttons: host-gated by control; per-button state mirrors the recording/proposal.
+  const gate = (id, ok) => {
+    const el = document.getElementById(id);
+    if (el) el.classList.toggle('disabled', !(iHoldControl && ok));
+  };
+  gate('cal1-reset', true);
+  gate('cal1-start', !s.calRecording);
+  gate('cal1-stop', !!s.calRecording);
+  gate('cal1-apply', !!s.calAccepted);
+  gate('cal1-revert', !!cal1Prev);
+}
 document.getElementById('rc-back').addEventListener('pointerdown', e => {
   e.stopPropagation(); lnOpen('tools', 'ln-tools', renderToolsPanel);
 });
@@ -4633,6 +4707,7 @@ function renderSettings() {
   if (asPanel.classList.contains('open')) renderAutoSteerLive();
   // Smart-WAS stats refresh while its modal is open.
   if (swPanel.classList.contains('open')) populateSmartWas();
+  if (document.getElementById('cal1').classList.contains('open')) populateCal1();
   // Steer Wizard: re-render while open (host-driven; live every frame).
   wizardDirty = false;
   if (wzOverlay.classList.contains('open')) renderWizard();

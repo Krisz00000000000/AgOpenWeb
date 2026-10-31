@@ -214,6 +214,13 @@ window.RemoteTransport = {
             ntripSession = { usingFallback: !!u8(), mainIsBack: !!u8(), hasFallback: !!u8(), profilePerField: !!u8(),
               state: u8(), lastError: i32(), attempts: i32(), retrySeconds: f32(), notice: str(), profile: str(), service: str() };
           }
+          // Automatic calibration menu (append-only): algorithm (0 = none), recording,
+          // per-direction usable samples, roll spread, the two gates, the proposal + standard
+          // errors (NaN = no fit), the message and the last sample rejection.
+          const calAlgorithm = i32(), calRecording = !!u8(), calForward = i32(), calReverse = i32();
+          const calRollRange = f32(), calDeterminate = !!u8(), calAccepted = !!u8();
+          const calOffset = f32(), calHeight = f32(), calOffsetSd = f32(), calHeightSd = f32();
+          const calMessage = str(), calReject = str();
           handlers.onStatusBar && handlers.onStatusBar({
             fixQuality, fixText, age, sats, isMetric,
             gpsOk, imuOk, autoSteerOk, machineOk, imuIp, autoSteerIp, machineIp,
@@ -226,6 +233,8 @@ window.RemoteTransport = {
             simPanelVisible, driftEasting, driftNorthing, unsavedCoveragePrompt,
             devOverlay, gpsToPgnLatencyMs, gpsSentence, dualHeadingMissing, ntripRtcm, systemData,
             gpsLost, isobus, fieldData, sendCorrectedPosition, scanReplySubnet, ntripSession,
+            calAlgorithm, calRecording, calForward, calReverse, calRollRange, calDeterminate,
+            calAccepted, calOffset, calHeight, calOffsetSd, calHeightSd, calMessage, calReject,
           });
           break;
         }

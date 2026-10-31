@@ -569,6 +569,26 @@ public static partial class RemoteServerWiring
                                     if (sc?.CanExecute(null) == true) sc.Execute(null);
                                     return;
                                 }
+                                // --- Automatic calibration menu (automatic calibration plan).
+                                // Recording and fitting run on the host; Apply writes the
+                                // proposal through config.set, i.e. the ordinary save path, so
+                                // no setting is written here. Every command needs control (the
+                                // default gate). arg = algorithm id (1..6, 1 is implemented). ---
+                                case "calibration.start":
+                                {
+                                    if (int.TryParse(arg, System.Globalization.NumberStyles.None,
+                                            System.Globalization.CultureInfo.InvariantCulture, out int calAlgorithm))
+                                    {
+                                        vm.StartAutomaticCalibration(calAlgorithm);
+                                    }
+                                    return;
+                                }
+                                case "calibration.stop":
+                                    vm.StopAutomaticCalibration();
+                                    return;
+                                case "calibration.reset":
+                                    vm.ResetAutomaticCalibration();
+                                    return;
                                 // --- Steer Wizard (host-driven). The real SteerWizardViewModel
                                 // runs here; the browser forwards nav + edits + actions. Only
                                 // wizard.action (calibration/actuation) is Tier-2 gated. ---

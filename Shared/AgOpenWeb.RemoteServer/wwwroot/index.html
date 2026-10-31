@@ -1570,6 +1570,13 @@
     <button id="ln-autosteer" class="ln-btn" title="AutoSteer Configuration"><img class="ln-ic" src="/icons/AutoSteerConf.png" alt="AutoSteer Configuration"></button>
     <button id="ln-fieldops" class="ln-btn" title="Field Operations"><img class="ln-ic" src="/icons/JobActive.png" alt="Field Operations"></button>
     <button id="ln-fieldtools" class="ln-btn" title="Field Tools"><img class="ln-ic" src="/icons/FieldTools.png" alt="Field Tools"></button>
+    <button id="ln-calibration" class="ln-btn" title="Calibration">
+      <svg class="ln-ic" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" style="stroke:currentColor;fill:none">
+        <circle cx="24" cy="24" r="15" stroke-width="2.5"/>
+        <path d="M24 9v7M24 32v7M9 24h7M32 24h7" stroke-width="2.5"/>
+        <circle cx="24" cy="24" r="3.5" stroke-width="2.5"/>
+      </svg>
+    </button>
     <button id="ln-vt" class="ln-btn" title="Virtual Terminal" style="display:none">
       <svg class="ln-ic" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" style="fill:none;stroke:currentColor">
         <rect x="5" y="8" width="29" height="30" rx="2" stroke-width="2.5"/>
@@ -2938,6 +2945,53 @@
       <button id="sw-start" class="sw-b sw-green rn-gated" data-cmd="smartwas.start">Start</button>
       <button id="sw-stop" class="sw-b sw-grey rn-gated" data-cmd="smartwas.stop">Stop</button>
       <button id="sw-apply" class="sw-b sw-blue rn-gated" data-cmd="smartwas.apply">Apply</button>
+    </div>
+  </div>
+  <!-- Calibration fly-out: one entry per algorithm of the automatic calibration plan.
+       Only 1 (antenna offset + height) is live; the rest are listed and greyed so the
+       menu is final and each algorithm drops into its own entry without moving anything. -->
+  <div id="calibration" class="ln-panel fm-panel">
+    <div class="ln-hdr"><span class="ln-hdr-title">Calibration</span><button class="ln-x ln-closex" title="Close">✕</button></div>
+    <div class="cfg-label">Automatic calibration</div>
+    <div class="fo-grid">
+      <button class="fo-btn" id="cl-antenna">1 · Antenna offset &amp; height</button>
+      <button class="fo-btn" id="cl-was" disabled>2 · WAS zero &amp; gain</button>
+      <button class="fo-btn" id="cl-steer" disabled>3 · Steering response</button>
+      <button class="fo-btn" id="cl-integral" disabled>4 · Cross-track integrator</button>
+      <button class="fo-btn" id="cl-drift" disabled>5 · Pass drift watch</button>
+      <button class="fo-btn" id="cl-fusion" disabled>6 · Sensor fusion</button>
+    </div>
+    <div class="sw-info">Step 1 is live. The greyed entries are the next steps of the calibration plan; each becomes available as its own algorithm lands.</div>
+  </div>
+  <!-- Calibration → Antenna offset & height (algorithm 1). Watch-the-tractor: opts out of
+       the light-dismiss scrim so the map stays interactive while recording. Back returns to
+       the Calibration menu, ✕ closes to the map. Apply writes AntennaOffset/AntennaHeight
+       through config.set — the ordinary save path; Revert puts the previous values back. -->
+  <div id="cal1" class="ln-panel sw-panel">
+    <div class="ln-hdr"><button class="ln-x" id="cal1-back" title="Back">←</button><span class="ln-hdr-title">Antenna offset &amp; height</span><button class="ln-x ln-closex" id="cal1-x" title="Close">✕</button></div>
+    <div class="sw-status">Status: <b id="cal1-status">Stopped</b></div>
+    <div class="sw-card">
+      <div class="sw-cardtitle">Recording</div>
+      <div class="sw-row"><span class="k">Samples A→B</span><span class="v" id="cal1-forward">0</span></div>
+      <div class="sw-row"><span class="k">Samples B→A</span><span class="v" id="cal1-reverse">0</span></div>
+      <div class="sw-row"><span class="k">Roll range</span><span class="v" id="cal1-roll">0.0°</span></div>
+      <div class="sw-row"><span class="k">Last sample</span><span class="v" id="cal1-reject"></span></div>
+    </div>
+    <div class="sw-card">
+      <div class="sw-cardtitle">Proposal</div>
+      <div class="sw-row"><span class="k">Antenna offset</span><span class="v" id="cal1-offset">—</span></div>
+      <div class="sw-row"><span class="k">Offset std dev</span><span class="v" id="cal1-offsetsd">—</span></div>
+      <div class="sw-row"><span class="k">Antenna height</span><span class="v" id="cal1-height">—</span></div>
+      <div class="sw-row"><span class="k">Height std dev</span><span class="v" id="cal1-heightsd">—</span></div>
+      <div class="sw-row"><span class="k">Current setting</span><span class="v" id="cal1-current">—</span></div>
+    </div>
+    <div class="sw-info" id="cal1-message"></div>
+    <div class="sw-btns">
+      <button id="cal1-reset" class="sw-b sw-grey rn-gated" data-cmd="calibration.reset">Reset</button>
+      <button id="cal1-start" class="sw-b sw-green rn-gated" data-cmd="calibration.start|1">Start</button>
+      <button id="cal1-stop" class="sw-b sw-grey rn-gated" data-cmd="calibration.stop">Stop</button>
+      <button id="cal1-apply" class="sw-b sw-blue rn-gated">Apply</button>
+      <button id="cal1-revert" class="sw-b sw-grey rn-gated">Revert</button>
     </div>
   </div>
   <!-- Steer Wizard — full-screen, host-driven. The real SteerWizardViewModel runs on

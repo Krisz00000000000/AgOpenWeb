@@ -1,10 +1,10 @@
 # Automatic calibration — algorithm 1: antenna lateral offset and height
 
-**Status:** the calculator layer and its unit tests landed; all tests green.
-**Not yet wired** into the GPS pipeline or the web UI, and nothing writes a setting —
-that wiring is the plan's next gated step (an operator reviews the signs and the field
-names first). Nothing outside `Shared/AgOpenWeb.Services/Calibration/` and the new test
-file was modified.
+**Status:** calculator + tests + **the Calibration menu in the web UI** landed; all calibration
+tests green. Algorithm 1 (antenna offset + height) records and proposes live; algorithms 2–6
+are listed in the menu, greyed out, waiting for their own steps. Nothing is applied without
+the operator: Apply writes the two vehicle fields through the ordinary `config.set` path, and
+Revert puts the previous values back. No field measurement has run yet.
 
 Source: *„AgOpenWeb – automatikus kalibrációs algoritmusok és AI-ügynöki megvalósítási
 terv"* (Hungarian, 2026-10-31), sections *Közös alapok* and *1. Antenna oldaleltolás és
@@ -21,6 +21,11 @@ asks for as the mandatory first step.
 | `Shared/AgOpenWeb.Services/Calibration/AntennaOffsetHeightCalibrator.cs` | The fit itself: column-normalized normal equations, Gauss–Jordan with partial pivoting, pivot gate, residuals and parameter uncertainties. Pure math, no DI, no I/O. |
 | `Shared/AgOpenWeb.Services/Calibration/AntennaCalibrationCollector.cs` | Recording buffer with the measurement gates, counters (per direction, roll range) and `Fit()` on request. No DI, no I/O, no config writes. |
 | `Tests/AgOpenWeb.Services.Tests/Calibration/AntennaOffsetHeightCalibrationTests.cs` | 25 test cases: known parameters, 5 seeds, white **and** AR(1) noise, the negative cases, collector gates, locale safety, plus an explicit `Report()`. |
+| `Shared/AgOpenWeb.Services/Calibration/CalibrationGeometry.cs` | Signed distance to the guidance line (positive = right of A→B) — the sampling geometry. |
+| `Tests/AgOpenWeb.Services.Tests/Calibration/CalibrationGeometryTests.cs` | 7 cases pinning that sign down, including the reversed-direction flip. |
+| `Shared/AgOpenWeb.Models/State/CalibrationState.cs` | The panel's live mirror (recording, counts, roll spread, proposal, message). `ApplicationState.Calibration`. |
+| `Shared/AgOpenWeb.ViewModels/MainViewModel.Calibration.cs` | Start/Stop/Reset + per-cycle sampling + the proposal mirror. |
+| Status frame + web client | New append-only fields (`Contracts.cs`, `WireCodec.cs`, `SceneProjector.cs`, `transport.js`) and the Calibration menu (`index.html`, `app.js`). |
 
 Run them:
 
@@ -183,34 +188,65 @@ directions are needed"); both directions but constant tilt → not determinate (
 never varied"); too few samples or too little roll → determinate but not accepted, with the
 gate named in the warning.
 
+## The Calibration menu (web UI)
+
+A new left-nav button (crosshair icon) opens **Calibration**, a fly-out listing the plan's six
+algorithms. Only entry 1 is live; 2–6 are greyed placeholders, so the menu is final and each
+algorithm drops into its own entry without moving anything.
+
+**Entry 1 — Antenna offset & height** (`#cal1`; a chain panel outside the light-dismiss scrim so
+the map can be watched while recording):
+
+| Element | What it shows |
+|---|---|
+| Status | Recording / Stopped |
+| Samples A→B, Samples B→A | usable samples per direction (gate: 100 each) |
+| Roll range | peak-to-peak roll covered (gate: 3°) |
+| Last sample | "accepted", or why the last one was dropped (no RTK Fixed, under 0.5 m/s, over 1 m off the line) |
+| Antenna offset / height | the proposal, with ± standard error |
+| Current setting | what `Vehicle.AntennaOffset` / `AntennaHeight` hold now, for comparison |
+| Message | the fit's own explanation ("both driving directions are needed…", "the roll never varied…", gate warnings) |
+
+Buttons: **Start** (`calibration.start|1`), **Stop**, **Reset** — gated on the host (every
+command needs control) and disabled client-side without it; **Apply** (two `config.set` writes,
+`vehicle.antennaOffset` + `vehicle.antennaHeight`, enabled only when the fit is accepted) and
+**Revert** (writes back the values Apply replaced). Nothing is written while the operator is not
+looking — Apply is a human action.
+
+Sampling runs on the UI thread inside `ApplyGpsCycleResult`, one sample per GPS cycle (10 Hz),
+from the **raw** antenna position the pipeline now carries in `GpsCycleResult`
+(`AntennaEasting` / `AntennaNorthing`, taken before the antenna-to-pivot transform) plus
+`IsHeadingSameWay`. Deviation is line-relative (`CalibrationGeometry`), the direction sign makes
+both passes comparable, and the fit runs every 25 new samples — never per cycle.
+
 ## Deliberately not done yet
 
-- No wiring: nothing in `GpsPipelineService`, no `ICalibrationService`, no `config.set`
-  path, no web panel, no i18n strings. The plan's own gate puts a human review of the signs
-  and field names before the pipeline is touched.
-- No ground-truth measurement: the numbers above are simulation. The plan's field test
-  (empty area, low speed, forward/backward on the same wheel track) has not run.
-- The fit does not model side-slip. It is the plan's known limit: on a slope the tractor
-  can slide, and that offset is not direction-dependent, so it biases `h`. Measure slowly.
+- Algorithms 2–6: menu entries exist and are disabled; no code behind them yet.
+- No ground-truth measurement: everything above is simulation. The plan's field test (empty
+  area, low speed, forward/backward on the same wheel track) has not run, so the sign of the
+  estimate has not been checked against a real tractor.
+- The fit does not model side-slip. It is the plan's known limit: on a slope the tractor can
+  slide, and that offset is not direction-dependent, so it biases `h`. Measure slowly.
 - `h` is the height above the **roll axis** as the transform assumes it (which it treats as
-  ground level). If the real roll axis is above the ground, the applied correction is the
-  same number but means something slightly different; the plan's 8 cm tolerance absorbs it.
+  ground level). If the real roll axis is above the ground, the applied correction is the same
+  number but means something slightly different; the plan's 8 cm tolerance absorbs it.
+- `CalibrationGeometry.SignedDistanceToTrack` duplicates the pipeline's private
+  `CalculatePerpendicularDistance`. Promoting that one helper and deleting the copy is the
+  follow-up; until then a test pins the sign so they cannot drift apart silently.
 
 ## Next steps (each gated on the one before)
 
-1. Operator review of this document: the sign table in §"Sign conventions", the field
-   names, and that `h` maps to `VehicleConfig.AntennaHeight` and `a` to
-   `VehicleConfig.AntennaOffset`.
-2. Wire the collector into `GpsPipelineService` at the raw antenna point (line 819, before
-   the transform), using line-relative deviation × direction sign, and an
-   `ICalibrationService` that only produces a proposal.
-3. VirtualModules run (drive the simulated vehicle both ways with a tilt) to confirm the
-   **sign** of the estimate end-to-end, then a bench test, then an empty-area measurement.
-4. Only then the web panel (start/stop, sample counters per direction, roll range, result,
-   Apply + Revert) with `tr(...)` strings through `Tools/i18n-extract.py`.
-5. Algorithm 2 (WAS zero/gain) afterwards — its yaw-rate source and the measured angle
-   source are partly identified here (§2, §3), but the module-side vs config-side location
-   of the WAS zero still has to be read out of the source.
+1. Operator review of this document: the sign table in §"Sign conventions", the field names,
+   that `h` maps to `VehicleConfig.AntennaHeight` and `a` to `VehicleConfig.AntennaOffset`,
+   and the panel's Apply/Revert behaviour.
+2. VirtualModules run (drive the simulated vehicle both ways with a tilt) to confirm the
+   **sign** of the estimate end to end — the panel is live, so this is now a bench session
+   rather than code work.
+3. Bench test on the tractor (parked or ≤1 m/s), then an empty-area measurement at low speed
+   with someone at the emergency stop.
+4. Algorithm 2 (WAS zero/gain) afterwards — its yaw-rate source and the measured angle source
+   are identified here (§2, §3), but the module-side vs config-side location of the WAS zero
+   still has to be read out of the source. Its menu entry is already in place.
 
 - **But** the published value is negated when driving against the track
   (`output.DistanceFromLinePivot *= -1.0` for `!isHeadingSameWay`, lines 283–286 and

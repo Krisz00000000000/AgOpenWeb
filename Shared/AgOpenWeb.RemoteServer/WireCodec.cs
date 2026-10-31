@@ -848,6 +848,23 @@ public static class WireCodec
             WriteStr(w, ns.Profile);
             WriteStr(w, ns.Service);
         }
+        // Automatic calibration menu (append-only): which algorithm is recording (i32,
+        // 0 = none), the recording flag, usable samples per direction (i32), the roll
+        // spread (f32 deg), the two gates, the proposal + standard errors (f32 metres,
+        // NaN with no fit) and the human-readable message / last sample rejection (str).
+        w.Write(s.CalAlgorithm);
+        w.Write((byte)(s.CalRecording ? 1 : 0));
+        w.Write(s.CalForwardSamples);
+        w.Write(s.CalReverseSamples);
+        w.Write((float)s.CalRollRangeDegrees);
+        w.Write((byte)(s.CalDeterminate ? 1 : 0));
+        w.Write((byte)(s.CalAccepted ? 1 : 0));
+        w.Write((float)s.CalOffsetMeters);
+        w.Write((float)s.CalHeightMeters);
+        w.Write((float)s.CalOffsetStdDevMeters);
+        w.Write((float)s.CalHeightStdDevMeters);
+        WriteStr(w, s.CalMessage);
+        WriteStr(w, s.CalReject);
         return ms.ToArray();
     }
 

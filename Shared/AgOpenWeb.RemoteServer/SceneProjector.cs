@@ -383,6 +383,7 @@ public sealed class SceneProjector
         var c = _state.Connections;
         var cfg = _config.Connections;
         var sw = _smartWas.GetSnapshot();
+        var cal = _state.Calibration;
         var gpsSource = GpsSourceProvider?.Invoke() ?? ("", false);
         // With the data lost, the last fix is history: read "No Fix", not a stale "RTK Fixed".
         bool gpsLost = c.IsGpsLost;
@@ -454,7 +455,15 @@ public sealed class SceneProjector
             FieldDataProvider?.Invoke(),
             cfg.SendCorrectedPosition,
             c.ScanReplySubnet ?? "",
-            BuildNtripSession(cfg.NtripProfilePerField, c));
+            BuildNtripSession(cfg.NtripProfilePerField, c),
+            // Automatic calibration panel (append-only): algorithm, recording, per-direction
+            // sample counts, roll spread, the two gates, the proposal + standard errors and
+            // the message / last sample rejection.
+            cal.Algorithm, cal.IsRecording, cal.ForwardSamples, cal.ReverseSamples,
+            cal.RollRangeDegrees, cal.IsDeterminate, cal.IsAccepted,
+            cal.LateralOffsetMeters, cal.HeightMeters,
+            cal.LateralOffsetStdDevMeters, cal.HeightStdDevMeters,
+            cal.Message, cal.LastRejectReason);
     }
 
     // The NTRIP session for the Network IO card, read live for every status frame.

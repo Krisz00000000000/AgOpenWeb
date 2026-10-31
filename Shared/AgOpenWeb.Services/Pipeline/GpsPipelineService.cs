@@ -1388,6 +1388,12 @@ public sealed class GpsPipelineService : IGpsPipelineService
             DifferentialAge = data.DifferentialAge,
             FixQuality = data.FixQuality,
             GpsValid = data.IsValid,
+            // Automatic antenna calibration (algorithm 1): the RAW antenna position taken
+            // before the (1b) antenna-to-pivot transform, plus this cycle's direction sign.
+            // Two field copies — no extra work on the hot path.
+            AntennaEasting = antennaE,
+            AntennaNorthing = antennaN,
+            IsHeadingSameWay = _guidanceWorking.IsHeadingSameWay,
             SentenceType = data.SentenceType,
             SentenceHeading = _sentenceHeading,
             ImuValid = data.ImuValid,

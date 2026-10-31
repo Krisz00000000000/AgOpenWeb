@@ -320,7 +320,24 @@ public record StatusDto(
     // Bytes 9–11 of the last scan reply: the subnet the scan came from (#334); "" = none.
     string ScanReplySubnet = "",
     // The NTRIP session: which service is in use, the failover state, the last failure (NTRIP plan).
-    NtripSessionDto? NtripSession = null);
+    NtripSessionDto? NtripSession = null,
+    // Automatic calibration menu (append-only). One snapshot of the Calibration panel:
+    // the algorithm being recorded (0 = none), the per-direction usable sample counts, the
+    // roll spread, the two gates, the proposal in metres (standard errors NaN with no fit)
+    // and the message / last sample rejection the panel shows.
+    int CalAlgorithm = 0,
+    bool CalRecording = false,
+    int CalForwardSamples = 0,
+    int CalReverseSamples = 0,
+    double CalRollRangeDegrees = 0,
+    bool CalDeterminate = false,
+    bool CalAccepted = false,
+    double CalOffsetMeters = 0,
+    double CalHeightMeters = 0,
+    double CalOffsetStdDevMeters = 0,
+    double CalHeightStdDevMeters = 0,
+    string CalMessage = "",
+    string CalReject = "");
 
 /// <summary>What the field data card shows beyond the worked area the status frame already
 /// carries: the boundary area less inner boundaries (0 = no boundary), the ground covered

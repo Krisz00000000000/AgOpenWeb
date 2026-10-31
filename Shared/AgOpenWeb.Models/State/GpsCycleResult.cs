@@ -39,6 +39,17 @@ public record GpsCycleResult
     public bool IsDualHeadingMissing { get; init; }
     public bool GpsValid { get; init; }
 
+    // Automatic antenna calibration (algorithm 1 of the calibration plan). The antenna
+    // pairs below are the RAW (uncorrected) antenna position in the local plane — the
+    // pipeline's Easting/Northing are the corrected pivot, so sampling those would
+    // measure the correction instead of the geometry. Line-relative deviation is derived
+    // from them against the active track; IsHeadingSameWay is the direction sign
+    // (+1 A→B, −1 B→A) that makes the deviation line-relative rather than
+    // vehicle-relative.
+    public double AntennaEasting { get; init; }
+    public double AntennaNorthing { get; init; }
+    public bool IsHeadingSameWay { get; init; } = true;
+
     // Tool position
     public double ToolEasting { get; init; }
     public double ToolNorthing { get; init; }
