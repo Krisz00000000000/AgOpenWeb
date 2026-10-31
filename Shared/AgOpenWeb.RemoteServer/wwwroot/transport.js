@@ -224,6 +224,19 @@ window.RemoteTransport = {
           // Wizard step + its stable key ("field", "track", "forward", "reverse", "roll", "result").
           const calStep = i32(), calStepKey = str();
           const calLineDistance = f32();
+          // Algorithms 2 (WAS zero + gain), 4 (cross-track integrator) and 5 (pass drift),
+          // append-only: the WAS recording/fit/proposal, the integrator's live correction, and
+          // the drift indicator.
+          const calWasSamples = i32(), calWasSteerRange = f32();
+          const calWasDeterminate = !!u8(), calWasAccepted = !!u8(), calWasGainObservable = !!u8();
+          const calWasZero = f32(), calWasZeroSd = f32(), calWasGain = f32(), calWasGainSd = f32();
+          const calWasMessage = str(), calWasReject = str();
+          const calWasProposedOffset = i32(), calWasProposedCpd = f32(), calWasProposedDelta = i32();
+          const calWasApplyValid = !!u8(), calWasGainApplied = !!u8(), calWasApplyMessage = str();
+          const calXteEnabled = !!u8(), calXteCorrection = f32(), calXteSaturated = !!u8();
+          const calXteMessage = str();
+          const calDriftArmed = !!u8(), calDriftStatus = i32(), calDriftSmoothed = f32();
+          const calDriftPasses = i32(), calDriftSuspect = !!u8(), calDriftMessage = str();
           handlers.onStatusBar && handlers.onStatusBar({
             fixQuality, fixText, age, sats, isMetric,
             gpsOk, imuOk, autoSteerOk, machineOk, imuIp, autoSteerIp, machineIp,
@@ -239,6 +252,13 @@ window.RemoteTransport = {
             calAlgorithm, calRecording, calForward, calReverse, calRollRange, calDeterminate,
             calAccepted, calOffset, calHeight, calOffsetSd, calHeightSd, calMessage, calReject,
             calStep, calStepKey, calLineDistance,
+            calWasSamples, calWasSteerRange, calWasDeterminate, calWasAccepted,
+            calWasGainObservable, calWasZero, calWasZeroSd, calWasGain, calWasGainSd,
+            calWasMessage, calWasReject, calWasProposedOffset, calWasProposedCpd,
+            calWasProposedDelta, calWasApplyValid, calWasGainApplied, calWasApplyMessage,
+            calXteEnabled, calXteCorrection, calXteSaturated, calXteMessage,
+            calDriftArmed, calDriftStatus, calDriftSmoothed, calDriftPasses,
+            calDriftSuspect, calDriftMessage,
           });
           break;
         }

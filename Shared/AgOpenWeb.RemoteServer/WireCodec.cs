@@ -869,6 +869,39 @@ public static class WireCodec
         w.Write(s.CalStep);
         WriteStr(w, s.CalStepKey);
         w.Write((float)s.CalLineDistanceMeters);
+        // Algorithm 2 (WAS zero + gain), append-only: samples (i32) and steer range (f32 deg),
+        // the gates, the fit (f32 deg / dimensionless; NaN with no fit), the messages (str), and
+        // the proposal Apply writes — module offset (i32 counts), counts per degree (f32),
+        // offset delta (i32), apply-valid + gain-applied flags, apply message (str).
+        w.Write(s.CalWasSamples);
+        w.Write((float)s.CalWasSteerRangeDegrees);
+        w.Write((byte)(s.CalWasDeterminate ? 1 : 0));
+        w.Write((byte)(s.CalWasAccepted ? 1 : 0));
+        w.Write((byte)(s.CalWasGainObservable ? 1 : 0));
+        w.Write((float)s.CalWasZeroDegrees);
+        w.Write((float)s.CalWasZeroStdDevDegrees);
+        w.Write((float)s.CalWasGain);
+        w.Write((float)s.CalWasGainStdDev);
+        WriteStr(w, s.CalWasMessage);
+        WriteStr(w, s.CalWasReject);
+        w.Write(s.CalWasProposedOffset);
+        w.Write((float)s.CalWasProposedCountsPerDegree);
+        w.Write(s.CalWasProposedOffsetDelta);
+        w.Write((byte)(s.CalWasApplyValid ? 1 : 0));
+        w.Write((byte)(s.CalWasGainApplied ? 1 : 0));
+        WriteStr(w, s.CalWasApplyMessage);
+        // Algorithm 4 (cross-track integrator), append-only.
+        w.Write((byte)(s.CalXteEnabled ? 1 : 0));
+        w.Write((float)s.CalXteCorrectionMeters);
+        w.Write((byte)(s.CalXteSaturated ? 1 : 0));
+        WriteStr(w, s.CalXteMessage);
+        // Algorithm 5 (pass-drift watcher), append-only.
+        w.Write((byte)(s.CalDriftArmed ? 1 : 0));
+        w.Write(s.CalDriftStatus);
+        w.Write((float)s.CalDriftSmoothedMeters);
+        w.Write(s.CalDriftPasses);
+        w.Write((byte)(s.CalDriftSuspect ? 1 : 0));
+        WriteStr(w, s.CalDriftMessage);
         return ms.ToArray();
     }
 

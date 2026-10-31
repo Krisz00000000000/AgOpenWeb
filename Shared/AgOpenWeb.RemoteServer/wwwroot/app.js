@@ -2389,13 +2389,13 @@ document.getElementById('dlg-tracks-close').addEventListener('pointerdown', e =>
 // to ConfigurationStore). Grows one entry per sub-phase.
 // Navigation: top-level buttons open a panel; sub-panels (vehicle/tool config) are
 // reached from the hub and carry a Back button. One panel open at a time.
-const LN_NAV_PANELS = ['screenalerts', 'tools', 'calibration', 'cal1', 'rollcorr', 'fieldtools', 'fieldbuilder', 'offsetfix', 'importtracks', 'recpath', 'boundarymenu', 'boundaryplayer', 'kmlboundary', 'vehtoolhub', 'vehiclecfg', 'toolcfg', 'autosteercfg', 'networkio', 'ntripsettings', 'systemdata', 'ntripprofiles', 'ntripeditor', 'smartwas', 'fieldops', 'fieldsandjobs', 'newfield', 'fromexisting', 'isoimport', 'kmlimport', 'resumejob', 'agsettings', 'agupload', 'agdownload', 'filemenu', 'appsettings', 'language', 'viewsettings', 'logviewer', 'hotkeys', 'help', 'about', 'bugreport'];
+const LN_NAV_PANELS = ['screenalerts', 'tools', 'calibration', 'cal1', 'cal2', 'cal4', 'cal5', 'rollcorr', 'fieldtools', 'fieldbuilder', 'offsetfix', 'importtracks', 'recpath', 'boundarymenu', 'boundaryplayer', 'kmlboundary', 'vehtoolhub', 'vehiclecfg', 'toolcfg', 'autosteercfg', 'networkio', 'ntripsettings', 'systemdata', 'ntripprofiles', 'ntripeditor', 'smartwas', 'fieldops', 'fieldsandjobs', 'newfield', 'fromexisting', 'isoimport', 'kmlimport', 'resumejob', 'agsettings', 'agupload', 'agdownload', 'filemenu', 'appsettings', 'language', 'viewsettings', 'logviewer', 'hotkeys', 'help', 'about', 'bugreport'];
 // Watch-the-tractor panels opt OUT of the light-dismiss scrim — the map must stay
 // interactive (pan/zoom to follow the tractor while capturing). They close only via
 // the header (Back / ✕).
 // The bug report panel too: leave it open while driving and press the button the
 // moment a problem shows, since the dump holds only the last 60 s of GPS data.
-const NO_SCRIM = new Set(['smartwas', 'cal1', 'recpath', 'boundaryplayer', 'fieldbuilder', 'bugreport', 'ntripsettings', 'ntripprofiles', 'ntripeditor']);
+const NO_SCRIM = new Set(['smartwas', 'cal1', 'cal2', 'cal4', 'cal5', 'recpath', 'boundaryplayer', 'fieldbuilder', 'bugreport', 'ntripsettings', 'ntripprofiles', 'ntripeditor']);
 const lnScrim = document.getElementById('ln-scrim');
 function lnCloseAll() {
   for (const id of LN_NAV_PANELS) document.getElementById(id).classList.remove('open');
@@ -2600,6 +2600,140 @@ function populateCal1() {
   gate('cal1-revert', !!cal1Prev);
   gate('cal1-finish', true);
   gate('cal1-mktrack', !s.calRecording || key === 'track');
+}
+// ---- Calibration → WAS zero & gain (algorithm 2) ---------------------------------------
+// The host records (steer angle against yaw rate) and fits zero + gain; this panel shows the
+// proposal and writes it on Apply through the ordinary config bridge, followed by the AutoSteer
+// panel's own Save so the module gets it (autosteer.sendSave). Revert restores the two values.
+let cal2Prev = null;
+function calGate(id, ok) {
+  const el = document.getElementById(id);
+  if (el) el.classList.toggle('disabled', !(iHoldControl && ok));
+}
+document.getElementById('cl-was').addEventListener('pointerdown', e => {
+  e.stopPropagation(); lnOpen('cal2', 'ln-calibration', populateCal2);
+});
+document.getElementById('cal2-back').addEventListener('pointerdown', e => {
+  e.stopPropagation(); lnOpen('calibration', 'ln-calibration');
+});
+for (const id of ['cal2-reset', 'cal2-stop'])
+  document.getElementById(id).addEventListener('pointerdown', e => {
+    e.stopPropagation(); rnSend(document.getElementById(id).dataset.cmd);
+  });
+document.getElementById('cal2-start').addEventListener('pointerdown', e => {
+  e.stopPropagation();
+  if (!iHoldControl) return;
+  rnSend('calibration.start|2');
+});
+document.getElementById('cal2-apply').addEventListener('pointerdown', e => {
+  e.stopPropagation();
+  const s = statusBar;
+  if (!iHoldControl || !s || !s.calWasApplyValid) return;
+  const a = (config && config.autosteer) || {};
+  cal2Prev = { wasOffset: a.wasOffset | 0, countsPerDegree: a.countsPerDegree || 0 };
+  cfgSend('autosteer.wasOffset', String(s.calWasProposedOffset | 0));
+  cfgSend('autosteer.countsPerDegree', String((s.calWasProposedCpd || 0).toFixed(1)));
+  transport.send('autosteer.sendSave');
+});
+document.getElementById('cal2-revert').addEventListener('pointerdown', e => {
+  e.stopPropagation();
+  if (!iHoldControl || !cal2Prev) return;
+  cfgSend('autosteer.wasOffset', String(cal2Prev.wasOffset));
+  cfgSend('autosteer.countsPerDegree', String(cal2Prev.countsPerDegree));
+  transport.send('autosteer.sendSave');
+  cal2Prev = null;
+});
+// ---- Calibration → Cross-track integrator (algorithm 4) --------------------------------
+// Not a recording: switching it on attaches the host's integrator to the guidance and this
+// panel shows the learned correction live. Nothing is saved — switching it off drops it.
+document.getElementById('cl-integral').addEventListener('pointerdown', e => {
+  e.stopPropagation(); lnOpen('cal4', 'ln-calibration', populateCal4);
+});
+document.getElementById('cal4-back').addEventListener('pointerdown', e => {
+  e.stopPropagation(); lnOpen('calibration', 'ln-calibration');
+});
+for (const id of ['cal4-reset', 'cal4-stop'])
+  document.getElementById(id).addEventListener('pointerdown', e => {
+    e.stopPropagation(); rnSend(document.getElementById(id).dataset.cmd);
+  });
+document.getElementById('cal4-start').addEventListener('pointerdown', e => {
+  e.stopPropagation();
+  if (!iHoldControl) return;
+  rnSend('calibration.start|4');
+});
+// ---- Calibration → Pass drift watch (algorithm 5) --------------------------------------
+// Observer mode: the host measures the seam to the neighbouring worked pass and smooths it
+// per pass. Arming is harmless — nothing is actuated and no setting is touched.
+document.getElementById('cl-drift').addEventListener('pointerdown', e => {
+  e.stopPropagation(); lnOpen('cal5', 'ln-calibration', populateCal5);
+});
+document.getElementById('cal5-back').addEventListener('pointerdown', e => {
+  e.stopPropagation(); lnOpen('calibration', 'ln-calibration');
+});
+for (const id of ['cal5-reset', 'cal5-stop'])
+  document.getElementById(id).addEventListener('pointerdown', e => {
+    e.stopPropagation(); rnSend(document.getElementById(id).dataset.cmd);
+  });
+document.getElementById('cal5-start').addEventListener('pointerdown', e => {
+  e.stopPropagation();
+  if (!iHoldControl) return;
+  rnSend('calibration.start|5');
+});
+// ---- Calibration panels 2/4/5: live readouts from the Status frame ---------------------
+function populateCal2() {
+  const s = statusBar; if (!s) return;
+  const mine = s.calAlgorithm === 2;
+  asSetText('cal2-status', mine && s.calRecording ? tr('Recording') : tr('Stopped'));
+  asSetText('cal2-instruction', tr('Weave left and right at 1.5–3 m/s on flat, empty ground. The fit needs 300 usable samples; the gain also needs the steering to move 8° or more.'));
+  asSetText('cal2-samples', tr('{n} of 300', { n: s.calWasSamples || 0 }));
+  asSetText('cal2-range', (s.calWasSteerRange || 0).toFixed(1) + '°');
+  asSetText('cal2-reject', s.calWasReject ? tr('rejected:') + ' ' + s.calWasReject : tr('accepted'));
+  const hasFit = !!s.calWasDeterminate && Number.isFinite(s.calWasZero);
+  asSetText('cal2-zero', hasFit ? (s.calWasZero || 0).toFixed(2) + '°' : '—');
+  asSetText('cal2-zerosd', hasFit && Number.isFinite(s.calWasZeroSd) ? '± ' + s.calWasZeroSd.toFixed(2) + '°' : '—');
+  asSetText('cal2-gain', hasFit ? (s.calWasGainObservable ? (s.calWasGain || 0).toFixed(3) : tr('not observable')) : '—');
+  asSetText('cal2-gainsd', hasFit && s.calWasGainObservable && Number.isFinite(s.calWasGainSd) ? '± ' + s.calWasGainSd.toFixed(3) : '—');
+  const a = (config && config.autosteer) || {};
+  asSetText('cal2-current', (a.wasOffset | 0) + ' / ' + (a.countsPerDegree || 0).toFixed(1));
+  const delta = s.calWasProposedDelta | 0;
+  asSetText('cal2-proposal', s.calWasApplyValid
+    ? (s.calWasProposedOffset | 0) + ' (' + (delta >= 0 ? '+' : '') + delta + ') / '
+      + (s.calWasProposedCpd || 0).toFixed(1) + (s.calWasGainApplied ? ' · ' + tr('gain applied') : '')
+    : '—');
+  asSetText('cal2-message', [s.calWasMessage, s.calWasApplyMessage].filter(Boolean).join(' · '));
+  calGate('cal2-reset', !!s.calAlgorithm);
+  calGate('cal2-start', !s.calRecording);
+  calGate('cal2-stop', mine && !!s.calRecording);
+  calGate('cal2-apply', !!s.calWasApplyValid && s.calAlgorithm === 2);
+  calGate('cal2-revert', !!cal2Prev);
+}
+function populateCal4() {
+  const s = statusBar; if (!s) return;
+  const on = !!s.calXteEnabled;
+  asSetText('cal4-status', on ? tr('On') : tr('Off'));
+  asSetText('cal4-correction', (Number.isFinite(s.calXteCorrection) ? s.calXteCorrection * 100 : 0).toFixed(1) + ' cm');
+  asSetText('cal4-hold', on ? (s.calXteSaturated ? tr('held — steering saturated') : tr('integrating')) : '—');
+  asSetText('cal4-message', s.calXteMessage || '');
+  calGate('cal4-reset', on);
+  calGate('cal4-start', !on);
+  calGate('cal4-stop', on);
+}
+const CAL_DRIFT_LABEL = ['Idle', 'OK', 'Watch', 'Alarm'];
+const CAL_DRIFT_COLOR = ['', '#4caf50', '#e8a33d', '#e04b4b'];
+function populateCal5() {
+  const s = statusBar; if (!s) return;
+  const status = Math.max(0, Math.min(3, s.calDriftStatus | 0));
+  const el = document.getElementById('cal5-status');
+  asSetText('cal5-status', tr(CAL_DRIFT_LABEL[status]));
+  if (el) el.style.color = CAL_DRIFT_COLOR[status] || '';
+  asSetText('cal5-passes', String(s.calDriftPasses || 0));
+  asSetText('cal5-smoothed', s.calDriftPasses > 0 && Number.isFinite(s.calDriftSmoothed)
+    ? (s.calDriftSmoothed * 100).toFixed(1) + ' cm' : '—');
+  asSetText('cal5-suspect', s.calDriftSuspect ? tr('suspected side-slip or wind') : '—');
+  asSetText('cal5-message', s.calDriftMessage || '');
+  calGate('cal5-reset', !!s.calDriftArmed);
+  calGate('cal5-start', !s.calDriftArmed);
+  calGate('cal5-stop', !!s.calDriftArmed);
 }
 document.getElementById('rc-back').addEventListener('pointerdown', e => {
   e.stopPropagation(); lnOpen('tools', 'ln-tools', renderToolsPanel);
@@ -4756,6 +4890,9 @@ function renderSettings() {
   // Smart-WAS stats refresh while its modal is open.
   if (swPanel.classList.contains('open')) populateSmartWas();
   if (document.getElementById('cal1').classList.contains('open')) populateCal1();
+  if (document.getElementById('cal2').classList.contains('open')) populateCal2();
+  if (document.getElementById('cal4').classList.contains('open')) populateCal4();
+  if (document.getElementById('cal5').classList.contains('open')) populateCal5();
   // Steer Wizard: re-render while open (host-driven; live every frame).
   wizardDirty = false;
   if (wzOverlay.classList.contains('open')) renderWizard();

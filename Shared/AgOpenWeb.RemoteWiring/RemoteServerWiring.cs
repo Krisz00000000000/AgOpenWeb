@@ -576,7 +576,10 @@ public static partial class RemoteServerWiring
                                 // Recording and fitting run on the host; Apply writes the
                                 // proposal through config.set, i.e. the ordinary save path, so
                                 // no setting is written here. Every command needs control (the
-                                // default gate). arg = algorithm id (1..6, 1 is implemented). ---
+                                // default gate). arg = algorithm id: 1 antenna, 2 WAS, 4
+                                // cross-track integrator, 5 pass-drift watcher. 3 (the only one
+                                // that moves the steering) waits for its safety review and 6 is
+                                // not started, so the VM ignores both. ---
                                 case "calibration.start":
                                 {
                                     if (int.TryParse(arg, System.Globalization.NumberStyles.None,

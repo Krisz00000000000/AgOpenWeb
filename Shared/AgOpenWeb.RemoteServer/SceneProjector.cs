@@ -465,7 +465,19 @@ public sealed class SceneProjector
             cal.LateralOffsetStdDevMeters, cal.HeightStdDevMeters,
             cal.Message, cal.LastRejectReason,
             // Guided wizard step + its stable key.
-            cal.Step, cal.StepKey, cal.LineDistanceMeters);
+            cal.Step, cal.StepKey, cal.LineDistanceMeters,
+            // Algorithm 2 (WAS zero + gain): recording, fit, proposal and messages.
+            cal.WasSamples, cal.WasSteerRangeDegrees,
+            cal.WasDeterminate, cal.WasAccepted, cal.WasGainObservable,
+            cal.WasZeroDegrees, cal.WasZeroStdDevDegrees, cal.WasGain, cal.WasGainStdDev,
+            cal.WasMessage, cal.WasRejectReason,
+            cal.WasProposedOffset, cal.WasProposedCountsPerDegree, cal.WasProposedOffsetDelta,
+            cal.WasApplyValid, cal.WasGainApplied, cal.WasApplyMessage,
+            // Algorithm 4 (cross-track integrator): on/off, the learned correction, the hold.
+            cal.XteEnabled, cal.XteCorrectionMeters, cal.XteSaturated, cal.XteMessage,
+            // Algorithm 5 (pass-drift watcher): armed, indicator, deviation, passes, hint.
+            cal.DriftArmed, cal.DriftStatus, cal.DriftSmoothedMeters, cal.DriftPasses,
+            cal.DriftSuspect, cal.DriftMessage);
     }
 
     // The NTRIP session for the Network IO card, read live for every status frame.

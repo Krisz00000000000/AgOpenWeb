@@ -838,6 +838,7 @@ public sealed class GpsPipelineService : IGpsPipelineService
         // The estimator is the bridge between GPS arrivals (10 Hz) and
         // the host control loop (100 Hz). Readers — control loop,
         // renderer — pull dead-reckoned pose between GPS samples.
+        double yawRateForResult = 0.0;
         if (_positionEstimator is not null)
         {
             // ImuValid only says the IMU *heading* is usable; a $PAOGI fix leaves it
@@ -860,6 +861,10 @@ public sealed class GpsPipelineService : IGpsPipelineService
                 yawRateRadPerSec,
                 rollRad,
                 ts));
+            // The estimator derives (and EMA-filters) the yaw rate from the heading change, so
+            // read it back for the cycle result: algorithm 2 (WAS zero + gain) fits the measured
+            // steer angle against it. One volatile read of the snapshot just published.
+            yawRateForResult = _positionEstimator.GetLatestSnapshot()?.YawRateRadPerSec ?? 0.0;
             // Test hook: fire so a synchronous control-loop tick can advance
             // the section state machine before this cycle's GpsCycleResult
             // captures section bits. No-op in production (loop runs on its
@@ -1394,6 +1399,9 @@ public sealed class GpsPipelineService : IGpsPipelineService
             AntennaEasting = antennaE,
             AntennaNorthing = antennaN,
             IsHeadingSameWay = _guidanceWorking.IsHeadingSameWay,
+            // Algorithm 2 (WAS zero + gain): the estimator's derived yaw rate (rad/s,
+            // positive = turning right).
+            YawRateRadPerSecond = yawRateForResult,
             SentenceType = data.SentenceType,
             SentenceHeading = _sentenceHeading,
             ImuValid = data.ImuValid,

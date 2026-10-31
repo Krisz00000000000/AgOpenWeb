@@ -343,7 +343,43 @@ public record StatusDto(
     int CalStep = 1,
     string CalStepKey = "field",
     // Metres driven in wizard step 2 (the AB line is built from the first 15 m of it).
-    double CalLineDistanceMeters = 0);
+    double CalLineDistanceMeters = 0,
+    // Automatic calibration — algorithm 2 (WAS zero + gain). Append-only: the recording's
+    // usable samples and steer-angle range, the fit's gates and values (NaN = no fit), the
+    // reject reason, and the proposal Apply would write (module offset in counts + counts per
+    // degree), so the client only sends the numbers it is shown.
+    int CalWasSamples = 0,
+    double CalWasSteerRangeDegrees = 0,
+    bool CalWasDeterminate = false,
+    bool CalWasAccepted = false,
+    bool CalWasGainObservable = false,
+    double CalWasZeroDegrees = 0,
+    double CalWasZeroStdDevDegrees = 0,
+    double CalWasGain = 0,
+    double CalWasGainStdDev = 0,
+    string CalWasMessage = "",
+    string CalWasReject = "",
+    int CalWasProposedOffset = 0,
+    double CalWasProposedCountsPerDegree = 0,
+    int CalWasProposedOffsetDelta = 0,
+    bool CalWasApplyValid = false,
+    bool CalWasGainApplied = false,
+    string CalWasApplyMessage = "",
+    // Algorithm 4 (cross-track integrator): switched on, the learned correction (metres), the
+    // "steering is saturated, integration held" flag and one line of state.
+    bool CalXteEnabled = false,
+    double CalXteCorrectionMeters = 0,
+    bool CalXteSaturated = false,
+    string CalXteMessage = "",
+    // Algorithm 5 (pass-drift watcher): armed, the traffic light (0 idle, 1 ok, 2 watch,
+    // 3 alarm), the smoothed deviation (metres), passes recorded, the "suspected side-slip"
+    // hint and the message.
+    bool CalDriftArmed = false,
+    int CalDriftStatus = 0,
+    double CalDriftSmoothedMeters = 0,
+    int CalDriftPasses = 0,
+    bool CalDriftSuspect = false,
+    string CalDriftMessage = "");
 
 /// <summary>What the field data card shows beyond the worked area the status frame already
 /// carries: the boundary area less inner boundaries (0 = no boundary), the ground covered

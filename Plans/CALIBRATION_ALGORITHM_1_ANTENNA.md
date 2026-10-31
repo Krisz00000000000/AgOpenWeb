@@ -250,7 +250,11 @@ procedure in the plan stays a gate.
 
 ## Deliberately not done yet
 
-- Algorithms 2–6: menu entries exist and are disabled; no code behind them yet.
+- Algorithms 2–5: 2 (WAS zero + gain), 4 (cross-track integrator) and 5 (pass-drift watcher) are
+  now wired too — their own panels, sampling and Apply paths are described in
+  [CALIBRATION_ALGORITHMS_2_5.md](CALIBRATION_ALGORITHMS_2_5.md). Algorithm 3 stays disabled: it
+  is the only one that moves the steering and its gated test path needs a human safety review.
+  Algorithm 6 is untouched, as the plan asks.
 - No ground-truth measurement: everything above is simulation. The plan's field test (empty
   area, low speed, forward/backward on the same wheel track) has not run, so the sign of the
   estimate has not been checked against a real tractor.

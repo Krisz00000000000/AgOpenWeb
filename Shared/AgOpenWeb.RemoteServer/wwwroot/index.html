@@ -2955,13 +2955,13 @@
     <div class="cfg-label">Automatic calibration</div>
     <div class="fo-grid">
       <button class="fo-btn" id="cl-antenna">1 · Antenna offset &amp; height</button>
-      <button class="fo-btn" id="cl-was" disabled>2 · WAS zero &amp; gain</button>
+      <button class="fo-btn" id="cl-was">2 · WAS zero &amp; gain</button>
       <button class="fo-btn" id="cl-steer" disabled>3 · Steering response</button>
-      <button class="fo-btn" id="cl-integral" disabled>4 · Cross-track integrator</button>
-      <button class="fo-btn" id="cl-drift" disabled>5 · Pass drift watch</button>
+      <button class="fo-btn" id="cl-integral">4 · Cross-track integrator</button>
+      <button class="fo-btn" id="cl-drift">5 · Pass drift watch</button>
       <button class="fo-btn" id="cl-fusion" disabled>6 · Sensor fusion</button>
     </div>
-    <div class="sw-info">Step 1 is live. The greyed entries are the next steps of the calibration plan; each becomes available as its own algorithm lands.</div>
+    <div class="sw-info">Steps 1, 2, 4 and 5 are live. Entry 3 is the one that moves the steering: its gated test path waits for the safety review the plan asks for, and 6 is not started.</div>
   </div>
   <!-- Calibration → Antenna offset & height (algorithm 1) as a guided wizard. The operator
        never opens a field or a track by hand: Start creates a temporary field (deleted again
@@ -2998,6 +2998,77 @@
       <button id="cal1-apply" class="sw-b sw-blue rn-gated">Apply</button>
       <button id="cal1-revert" class="sw-b sw-grey rn-gated">Revert</button>
       <button id="cal1-finish" class="sw-b sw-grey rn-gated">Finish</button>
+    </div>
+  </div>
+  <!-- Calibration → WAS zero & gain (algorithm 2). The host records the steer module's angle
+       against the yaw rate and fits zero + gain; Apply writes the module's own WAS calibration
+       through the ordinary config bridge and then pushes it out (autosteer.sendSave), so no
+       setting is written behind the operator's back. Revert puts the previous values back. -->
+  <div id="cal2" class="ln-panel sw-panel">
+    <div class="ln-hdr"><button class="ln-x" id="cal2-back" title="Back">←</button><span class="ln-hdr-title">WAS zero &amp; gain</span><button class="ln-x ln-closex" id="cal2-x" title="Close">✕</button></div>
+    <div class="sw-status">Status: <b id="cal2-status">Stopped</b></div>
+    <div class="sw-info" id="cal2-instruction"></div>
+    <div class="sw-card">
+      <div class="sw-cardtitle">Recording</div>
+      <div class="sw-row"><span class="k">Samples</span><span class="v" id="cal2-samples">0</span></div>
+      <div class="sw-row"><span class="k">Steer range</span><span class="v" id="cal2-range">0.0°</span></div>
+      <div class="sw-row"><span class="k">Last sample</span><span class="v" id="cal2-reject"></span></div>
+    </div>
+    <div class="sw-card">
+      <div class="sw-cardtitle">Proposal</div>
+      <div class="sw-row"><span class="k">Zero</span><span class="v" id="cal2-zero">—</span></div>
+      <div class="sw-row"><span class="k">Zero std dev</span><span class="v" id="cal2-zerosd">—</span></div>
+      <div class="sw-row"><span class="k">Gain</span><span class="v" id="cal2-gain">—</span></div>
+      <div class="sw-row"><span class="k">Gain std dev</span><span class="v" id="cal2-gainsd">—</span></div>
+      <div class="sw-row"><span class="k">Current WAS</span><span class="v" id="cal2-current">—</span></div>
+      <div class="sw-row"><span class="k">Apply writes</span><span class="v" id="cal2-proposal">—</span></div>
+    </div>
+    <div class="sw-info" id="cal2-message"></div>
+    <div class="sw-btns">
+      <button id="cal2-reset" class="sw-b sw-grey rn-gated" data-cmd="calibration.reset">Reset</button>
+      <button id="cal2-start" class="sw-b sw-green rn-gated">Start</button>
+      <button id="cal2-stop" class="sw-b sw-grey rn-gated" data-cmd="calibration.stop">Stop</button>
+      <button id="cal2-apply" class="sw-b sw-blue rn-gated">Apply</button>
+      <button id="cal2-revert" class="sw-b sw-grey rn-gated">Revert</button>
+    </div>
+  </div>
+  <!-- Calibration → Cross-track integrator (algorithm 4). Off by default: it learns a slow
+       steady-state correction on top of the steering law, which also hides a wrong antenna or
+       roll calibration — so algorithm 1 is measured with this off. -->
+  <div id="cal4" class="ln-panel sw-panel">
+    <div class="ln-hdr"><button class="ln-x" id="cal4-back" title="Back">←</button><span class="ln-hdr-title">Cross-track integrator</span><button class="ln-x ln-closex" id="cal4-x" title="Close">✕</button></div>
+    <div class="sw-status">Status: <b id="cal4-status">Off</b></div>
+    <div class="sw-info">Learns the steady-state cross-track error a proportional law cannot remove (slope, side wind, implement pull) and adds it to the error the steering law sees. Nothing is saved: switching it off drops the correction.</div>
+    <div class="sw-card">
+      <div class="sw-cardtitle">Learned correction</div>
+      <div class="sw-row"><span class="k">Correction</span><span class="v" id="cal4-correction">0.0 cm</span></div>
+      <div class="sw-row"><span class="k">Integration</span><span class="v" id="cal4-hold">—</span></div>
+    </div>
+    <div class="sw-info" id="cal4-message"></div>
+    <div class="sw-btns">
+      <button id="cal4-reset" class="sw-b sw-grey rn-gated" data-cmd="calibration.reset">Reset</button>
+      <button id="cal4-start" class="sw-b sw-green rn-gated">Switch on</button>
+      <button id="cal4-stop" class="sw-b sw-grey rn-gated" data-cmd="calibration.stop">Switch off</button>
+    </div>
+  </div>
+  <!-- Calibration → Pass drift watch (algorithm 5). Observer only: it records the seam between
+       this pass and the neighbouring, already worked one, and raises the indicator when the
+       smoothed deviation stays past the threshold — the signal to re-run 1 or 2. -->
+  <div id="cal5" class="ln-panel sw-panel">
+    <div class="ln-hdr"><button class="ln-x" id="cal5-back" title="Back">←</button><span class="ln-hdr-title">Pass drift watch</span><button class="ln-x ln-closex" id="cal5-x" title="Close">✕</button></div>
+    <div class="sw-status">Status: <b id="cal5-status">Idle</b></div>
+    <div class="sw-info">Nothing is corrected here. Each pass's seam against the neighbouring worked pass is measured and smoothed; when it stays past the threshold, the antenna/roll or the WAS zero wants another run.</div>
+    <div class="sw-card">
+      <div class="sw-cardtitle">Drift</div>
+      <div class="sw-row"><span class="k">Passes</span><span class="v" id="cal5-passes">0</span></div>
+      <div class="sw-row"><span class="k">Smoothed deviation</span><span class="v" id="cal5-smoothed">—</span></div>
+      <div class="sw-row"><span class="k">Hint</span><span class="v" id="cal5-suspect">—</span></div>
+    </div>
+    <div class="sw-info" id="cal5-message"></div>
+    <div class="sw-btns">
+      <button id="cal5-reset" class="sw-b sw-grey rn-gated" data-cmd="calibration.reset">Reset</button>
+      <button id="cal5-start" class="sw-b sw-green rn-gated">Arm</button>
+      <button id="cal5-stop" class="sw-b sw-grey rn-gated" data-cmd="calibration.stop">Stop</button>
     </div>
   </div>
   <!-- Steer Wizard — full-screen, host-driven. The real SteerWizardViewModel runs on

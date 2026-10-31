@@ -50,6 +50,15 @@ public record GpsCycleResult
     public double AntennaNorthing { get; init; }
     public bool IsHeadingSameWay { get; init; } = true;
 
+    /// <summary>
+    /// Yaw rate of the vehicle, rad/s, from the position estimator: the time derivative of the
+    /// fused heading, EMA-smoothed (the receiver's own gyro field is not trusted — see
+    /// <c>GpsPipelineService</c>). Because AgOpenWeb's heading is the compass heading, a
+    /// <b>positive</b> value means turning right. Algorithm 2 (WAS zero + gain) is the
+    /// consumer; the sentence's yaw rate is not exposed anywhere else.
+    /// </summary>
+    public double YawRateRadPerSecond { get; init; }
+
     // Tool position
     public double ToolEasting { get; init; }
     public double ToolNorthing { get; init; }

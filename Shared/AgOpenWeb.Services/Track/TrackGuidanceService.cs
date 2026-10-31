@@ -6,6 +6,7 @@ using System;
 using System.Collections.Generic;
 using AgOpenWeb.Models.Base;
 using AgOpenWeb.Models.Track;
+using AgOpenWeb.Services.Calibration;
 using AgOpenWeb.Services.Interfaces;
 
 namespace AgOpenWeb.Services.Track;
@@ -22,6 +23,17 @@ public class TrackGuidanceService : ITrackGuidanceService
 {
     private const double PIBy2 = Math.PI / 2.0;
     private const double TwoPI = Math.PI * 2.0;
+
+    /// <summary>
+    /// The cross-track integrator (algorithm 4 of the calibration plan), when the operator has
+    /// switched it on. Null (the default) = the plain proportional law, exactly as before.
+    /// The service only <b>reads</b> it here: the integrating step itself runs once per GPS cycle
+    /// on the host, so attaching an integrator never changes the 100 Hz control path's cost.
+    /// </summary>
+    private XteIntegrator? _xteIntegrator;
+
+    /// <inheritdoc />
+    public void SetXteIntegrator(XteIntegrator? integrator) => _xteIntegrator = integrator;
 
     /// <summary>
     /// Calculate steering guidance for a track.
@@ -173,14 +185,22 @@ public class TrackGuidanceService : ITrackGuidanceService
         output.ClosestPointPivot = new Vec2(closestEast, closestNorth);
         output.ManualUturnHeading = ptA.Heading;
 
+        // Algorithm 4: the learned steady-state correction, in the same line-relative sign
+        // space as DistanceFromLinePivot (positive = right of A→B). Zero when the operator has
+        // the integrator off. The steering laws below apply it with the opposite sign: aiming
+        // at a line shifted −c to the left (resp. offsetting the Stanley line by −c) makes the
+        // law see the corrected error e + c, which is what the plan asks for (“a szabályzó a
+        // mért keresztirányú hiba e helyett a korrigált e + c értéket kapja”).
+        double xteCorrection = _xteIntegrator?.Correction ?? 0.0;
+
         // Apply algorithm-specific calculations
         if (input.UseStanley)
         {
-            CalculateStanleyGuidance(input, output, points, indexA, indexB, ptA, ptB, dx, dz, isHeadingSameWay);
+            CalculateStanleyGuidance(input, output, points, indexA, indexB, ptA, ptB, dx, dz, isHeadingSameWay, xteCorrection);
         }
         else
         {
-            CalculatePurePursuitGuidance(input, output, points, indexA, indexB, ptA, ptB, dx, dz, reverseHeading, isABLine, isClosed, isHeadingSameWay);
+            CalculatePurePursuitGuidance(input, output, points, indexA, indexB, ptA, ptB, dx, dz, reverseHeading, isABLine, isClosed, isHeadingSameWay, xteCorrection);
         }
 
         return output;
@@ -199,7 +219,8 @@ public class TrackGuidanceService : ITrackGuidanceService
         bool reverseHeading,
         bool isABLine,
         bool isClosed,
-        bool isHeadingSameWay)
+        bool isHeadingSameWay,
+        double xteCorrection)
     {
         // Calculate integral term
         CalculateIntegralTerm(input, output);
@@ -241,6 +262,20 @@ public class TrackGuidanceService : ITrackGuidanceService
                     output.IsAtEndOfTrack = true;
                 }
             }
+        }
+
+        // Algorithm 4: aim at a line shifted left by the integrator's correction c (see
+        // CalculateGuidance). The goal point is the only lever Pure Pursuit has here, so it
+        // moves −c along the A→B line's right normal: the law then steers on the corrected
+        // error e + c. Both driving directions use the A→B normal, which is the frame the
+        // line-relative correction is measured in (the normals of the offset pass are parallel,
+        // so the pass geometry itself is untouched).
+        if (xteCorrection != 0.0)
+        {
+            double segmentHeading = Math.Atan2(dx, dz);
+            output.GoalPoint = new Vec2(
+                output.GoalPoint.Easting - (Math.Cos(segmentHeading) * xteCorrection),
+                output.GoalPoint.Northing + (Math.Sin(segmentHeading) * xteCorrection));
         }
 
         // Calculate Pure Pursuit steering
@@ -306,7 +341,8 @@ public class TrackGuidanceService : ITrackGuidanceService
         int indexA, int indexB,
         Vec3 ptA, Vec3 ptB,
         double dx, double dz,
-        bool isHeadingSameWay)
+        bool isHeadingSameWay,
+        double xteCorrection)
     {
         // Apply integral offset to create virtual offset line. The integral is accumulated
         // from the pivot distance, which is flipped when driving against the track — it is
@@ -315,6 +351,10 @@ public class TrackGuidanceService : ITrackGuidanceService
         // cancels the correction instead of adding to it (XTE holds one way, drifts the other).
         // Inherited from AgOpenGPS StanleyGuidanceABLine; here the same routine serves curves.
         double integral = (input.PreviousState?.Integral ?? 0) * (isHeadingSameWay ? 1.0 : -1.0);
+        // Algorithm 4: the cross-track integrator's correction c shifts this offset line the
+        // other way (right-shift minus c), which is what makes the law see the corrected error
+        // e + c instead of the measured e — see CalculateGuidance.
+        integral -= xteCorrection;
         Vec3 steerA = new Vec3(
             ptA.Easting + Math.Sin(ptA.Heading + PIBy2) * integral,
             ptA.Northing + Math.Cos(ptA.Heading + PIBy2) * integral,

@@ -70,4 +70,129 @@ public class CalibrationState
     /// panel can say "no RTK", "too slow", "too far off the line" instead of nothing
     /// happening.</summary>
     public string LastRejectReason { get; set; } = "";
+
+    // ── Algorithm 2: WAS zero and gain ──────────────────────────────────
+
+    /// <summary>Usable samples recorded by the WAS calibration.</summary>
+    public int WasSamples { get; set; }
+
+    /// <summary>Steer-angle range the samples covered, degrees (the gain gate).</summary>
+    public double WasSteerRangeDegrees { get; set; }
+
+    /// <summary>The fit produced usable unknowns.</summary>
+    public bool WasDeterminate { get; set; }
+
+    /// <summary>Every gate passed, so the zero may be applied.</summary>
+    public bool WasAccepted { get; set; }
+
+    /// <summary>The steering moved far enough for the gain to be observable.</summary>
+    public bool WasGainObservable { get; set; }
+
+    /// <summary>The sensor reading that means "wheels straight", degrees.</summary>
+    public double WasZeroDegrees { get; set; }
+
+    /// <summary>Standard error of <see cref="WasZeroDegrees"/> (NaN when unknown).</summary>
+    public double WasZeroStdDevDegrees { get; set; }
+
+    /// <summary>Fitted gain (inverse sensor scale, ≈ 1 when right).</summary>
+    public double WasGain { get; set; }
+
+    /// <summary>Standard error of <see cref="WasGain"/> (NaN when not observable).</summary>
+    public double WasGainStdDev { get; set; }
+
+    /// <summary>One-line WAS result or the reason it cannot be accepted yet.</summary>
+    public string WasMessage { get; set; } = "";
+
+    /// <summary>Why the most recent WAS sample was dropped ("" when kept).</summary>
+    public string WasRejectReason { get; set; } = "";
+
+    /// <summary>The <c>AutoSteer.WasOffset</c> (raw counts) the WAS proposal would write —
+    /// only meaningful when <see cref="WasApplyValid"/>.</summary>
+    public int WasProposedOffset { get; set; }
+
+    /// <summary>The <c>AutoSteer.CountsPerDegree</c> the WAS proposal would write (the fitted
+    /// gain folded in when it was observable, otherwise the current value).</summary>
+    public double WasProposedCountsPerDegree { get; set; }
+
+    /// <summary>How far the WAS offset would move, counts (signed) — the panel's readback.</summary>
+    public int WasProposedOffsetDelta { get; set; }
+
+    /// <summary>The proposal may actually be applied (fits and passes
+    /// <see cref="AgOpenWeb.Services.Calibration.WasZeroGainApplication"/>'s guards).</summary>
+    public bool WasApplyValid { get; set; }
+
+    /// <summary>One line describing what Apply would write, or why it may not.</summary>
+    public string WasApplyMessage { get; set; } = "";
+
+    /// <summary>The fitted gain went into <see cref="WasProposedCountsPerDegree"/> rather than
+    /// being left alone.</summary>
+    public bool WasGainApplied { get; set; }
+
+    // ── Algorithm 3: steering response (the only one that moves the steering) ──
+
+    /// <summary>0 idle, 1 running, 2 finished with a result.</summary>
+    public int SteerTestStage { get; set; }
+
+    /// <summary>How far the running test has got, 0–1.</summary>
+    public double SteerTestProgress { get; set; }
+
+    /// <summary>The response fit produced usable unknowns.</summary>
+    public bool SteerDeterminate { get; set; }
+
+    /// <summary>The first-order model describes the response and no gate failed.</summary>
+    public bool SteerAccepted { get; set; }
+
+    /// <summary>Dead time θ, seconds.</summary>
+    public double SteerDeadTimeSeconds { get; set; }
+
+    /// <summary>Time constant τ, seconds.</summary>
+    public double SteerTimeConstantSeconds { get; set; }
+
+    /// <summary>Steady-state gain K.</summary>
+    public double SteerGain { get; set; }
+
+    /// <summary>The servo looks rate limited — repeat with a smaller step.</summary>
+    public bool SteerRateLimited { get; set; }
+
+    /// <summary>Steering-box play, degrees (NaN until measured).</summary>
+    public double SteerBacklashDegrees { get; set; }
+
+    /// <summary>One-line steering result or the reason there is none yet.</summary>
+    public string SteerMessage { get; set; } = "";
+
+    // ── Algorithm 4: cross-track integrator ─────────────────────────────
+
+    /// <summary>The operator switched the integrator on for this session.</summary>
+    public bool XteEnabled { get; set; }
+
+    /// <summary>The learned correction in metres (the panel shows it in cm).</summary>
+    public double XteCorrectionMeters { get; set; }
+
+    /// <summary>The steering was saturated on the last cycle (integration held).</summary>
+    public bool XteSaturated { get; set; }
+
+    /// <summary>One line: what the integrator is doing, or why it is holding this cycle.</summary>
+    public string XteMessage { get; set; } = "";
+
+    // ── Algorithm 5: pass-drift watcher ─────────────────────────────────
+
+    /// <summary>The operator armed the watcher for this session (the watcher corrects
+    /// nothing; this only decides whether passes are recorded).</summary>
+    public bool DriftArmed { get; set; }
+
+    /// <summary>The traffic light as <c>PassDriftStatus</c>: 0 idle, 1 ok, 2 watch, 3 alarm.</summary>
+    public int DriftStatus { get; set; }
+
+    /// <summary>The smoothed per-pass deviation, metres.</summary>
+    public double DriftSmoothedMeters { get; set; }
+
+    /// <summary>Passes recorded since the watcher was armed.</summary>
+    public int DriftPasses { get; set; }
+
+    /// <summary>The last pass pair had the same deviation sign in both directions —
+    /// suspected side-slip rather than a calibration error.</summary>
+    public bool DriftSuspect { get; set; }
+
+    /// <summary>One-line drift status or the reason a pass was skipped.</summary>
+    public string DriftMessage { get; set; } = "";
 }
